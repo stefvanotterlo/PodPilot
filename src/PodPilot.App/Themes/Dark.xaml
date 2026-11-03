@@ -1,0 +1,23 @@
+<!-- Kleuren voor het donkere thema. Light.xaml gebruikt dezelfde sleutels. -->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="WindowBackground" Color="#202226" />
+    <SolidColorBrush x:Key="PageBackground" Color="#1B1C1F" />
+    <SolidColorBrush x:Key="CardBackground" Color="#26282C" />
+    <SolidColorBrush x:Key="DividerBrush" Color="#33373D" />
+    <SolidColorBrush x:Key="WindowBorder" Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="TextPrimary" Color="#F1F2F4" />
+    <SolidColorBrush x:Key="TextSecondary" Color="#A6ABB3" />
+    <SolidColorBrush x:Key="IconFill" Color="#D9DCE1" />
+    <SolidColorBrush x:Key="TrackBrush" Color="#3A3D43" />
+    <SolidColorBrush x:Key="ButtonBackground" Color="#2D3035" />
+    <SolidColorBrush x:Key="ButtonHoverBackground" Color="#383C42" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#5B9BFF" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#78AEFF" />
+    <SolidColorBrush x:Key="AccentForeground" Color="#0B1A33" />
+    <SolidColorBrush x:Key="AccentSubtleBrush" Color="#2E5B9BFF" />
+    <SolidColorBrush x:Key="NavBackground" Color="#17181B" />
+    <SolidColorBrush x:Key="HighBrush" Color="#3CC46D" />
+    <SolidColorBrush x:Key="MediumBrush" Color="#F0B429" />
+    <SolidColorBrush x:Key="LowBrush" Color="#FF6369" />
+</ResourceDictionary>

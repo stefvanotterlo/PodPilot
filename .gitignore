@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+publish/
+installer/output/
+
+# Notities voor Claude met gegevens over deze laptop; alleen lokaal.
+CLAUDE.md
+.claude/

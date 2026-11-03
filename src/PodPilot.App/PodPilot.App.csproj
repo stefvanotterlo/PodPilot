@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <!-- Alleen voor NotifyIcon (systeemvak) en System.Drawing (tray-icoon tekenen). -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>PodPilot</AssemblyName>
+    <RootNamespace>PodPilot.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- WFAC010 is een WinForms-advies; voor een WPF-app hoort de DPI-instelling juist in app.manifest. -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <!-- Versie-info in de exe; de installer (installer/PodPilot.iss) leest de versie hieruit. -->
+    <Version>1.2.1</Version>
+    <Product>PodPilot</Product>
+    <Description>AirPods-batterij en verbinding</Description>
+    <!-- Alleen bij een single-file publish: de exe gecomprimeerd opslaan (scheelt ruim de helft). -->
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WinForms-namespaces niet globaal importeren: die botsen met WPF (Application, Button, ...). -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PodPilot.Core\PodPilot.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+  </ItemGroup>
+
+</Project>
