@@ -186,6 +186,48 @@ public partial class MainWindow : Window
 
     // --- Over -----------------------------------------------------------------------------
 
+    // Verborgen: 10x achter elkaar op spatie op het tabblad Over. Een andere toets of meer dan
+    // 2 seconden pauze begint opnieuw.
+    private const int EasterEggPresses = 10;
+    private static readonly TimeSpan EasterEggMaxPause = TimeSpan.FromSeconds(2);
+    private int _spacePresses;
+    private DateTime _lastSpace = DateTime.MinValue;
+
+    /// <summary>De verborgen achtergrond is gevonden (10x spatie op het tabblad Over).</summary>
+    public event EventHandler? EasterEggTriggered;
+
+    /// <summary>Verbergt de inhoud van het tabblad Over, zodat alleen de achtergrondfoto te zien is.</summary>
+    public void HideAboutContent() => AboutContent.Visibility = Visibility.Collapsed;
+
+    private void OnWindowPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (AboutPage.Visibility != Visibility.Visible || e.IsRepeat)
+            return;
+
+        // Lock- en modifiertoetsen tellen niet mee (sommige hulpprogramma's sturen die tussendoor).
+        if (Hotkey.IsModifierKey(e.Key) || e.Key is System.Windows.Input.Key.NumLock
+                or System.Windows.Input.Key.CapsLock or System.Windows.Input.Key.Scroll)
+            return;
+
+        if (e.Key != System.Windows.Input.Key.Space)
+        {
+            _spacePresses = 0;
+            return;
+        }
+
+        // Op dit tabblad doet spatie niets anders: niet ook een knop met focus laten indrukken.
+        e.Handled = true;
+        var now = DateTime.Now;
+        _spacePresses = now - _lastSpace > EasterEggMaxPause ? 1 : _spacePresses + 1;
+        _lastSpace = now;
+
+        if (_spacePresses < EasterEggPresses)
+            return;
+
+        _spacePresses = 0;
+        EasterEggTriggered?.Invoke(this, EventArgs.Empty);
+    }
+
     private void OnOpenLogClick(object sender, RoutedEventArgs e) => Open(DiagnosticLog.FilePath);
 
     private void OnOpenSettingsFolderClick(object sender, RoutedEventArgs e) =>

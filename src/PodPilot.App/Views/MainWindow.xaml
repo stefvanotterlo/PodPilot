@@ -13,7 +13,8 @@
         Title="PodPilot"
         Width="1000" Height="640" MinWidth="900" MinHeight="560" WindowStartupLocation="CenterScreen"
         Background="{DynamicResource PageBackground}" FontFamily="{StaticResource UiFont}"
-        Foreground="{DynamicResource TextPrimary}" UseLayoutRounding="True">
+        Foreground="{DynamicResource TextPrimary}" UseLayoutRounding="True"
+        PreviewKeyDown="OnWindowPreviewKeyDown">
 
     <Window.Resources>
         <!-- Titel + uitleg links in een instellingenregel. -->
@@ -481,7 +482,8 @@
 
         <!-- ===== Over ===== -->
         <ScrollViewer x:Name="AboutPage" Grid.Column="1" Style="{StaticResource Page}">
-            <StackPanel Margin="36,30,36,24" MaxWidth="760" HorizontalAlignment="Left">
+            <!-- Verdwijnt als de verborgen achtergrond aangaat, zodat je alleen de foto ziet. -->
+            <StackPanel x:Name="AboutContent" Margin="36,30,36,24" MaxWidth="760" HorizontalAlignment="Left">
                 <TextBlock Text="Over PodPilot" Style="{StaticResource PageTitle}" />
                 <Border Style="{StaticResource Card}" Padding="20,18">
                     <Grid>

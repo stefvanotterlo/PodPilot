@@ -205,6 +205,19 @@ public partial class App : Application
         ThemeManager.ApplyTo(_mainWindow, _settings.Theme);
         _mainWindow.ShowPage(page);
         _mainWindow.ConnectToggleRequested += async (_, _) => await ToggleConnectionAsync();
+        _mainWindow.EasterEggTriggered += (_, _) =>
+        {
+            _easterEggActive = true;
+            DiagnosticLog.Write("verborgen achtergrond aan (tot afsluiten)");
+            ApplyEasterEgg(_mainWindow);
+            ApplyEasterEgg(_popup);
+            _mainWindow?.HideAboutContent();
+        };
+        if (_easterEggActive)
+        {
+            ApplyEasterEgg(_mainWindow);
+            _mainWindow.HideAboutContent();
+        }
         _mainWindow.SettingsChanged += async (_, _) =>
         {
             ApplySettings();
@@ -217,6 +230,28 @@ public partial class App : Application
         _mainWindow.Closed += (_, _) => _mainWindow = null;
         _mainWindow.Show();
         _mainWindow.Activate();
+    }
+
+    // Verborgen achtergrond: staat alleen in het geheugen, dus na afsluiten is hij weg.
+    private bool _easterEggActive;
+
+    /// <summary>
+    /// Zet de verborgen foto als achtergrond van een venster. Sleutels direct in Window.Resources
+    /// gaan vóór de kleurendictionary van het thema, dus ook na een themawissel blijft hij staan.
+    /// </summary>
+    private static void ApplyEasterEgg(Window? window)
+    {
+        if (window is null)
+            return;
+
+        var photo = new System.Windows.Media.ImageBrush(new System.Windows.Media.Imaging.BitmapImage(
+            new Uri("pack://application:,,,/Assets/easter-egg.png")))
+        {
+            Stretch = System.Windows.Media.Stretch.UniformToFill,
+        };
+        photo.Freeze();
+        window.Resources["PageBackground"] = photo;
+        window.Resources["WindowBackground"] = photo;
     }
 
     /// <summary>Zet de sneltoets voor de pop-up (null = uit). Geeft false als een andere app hem al gebruikt.</summary>
