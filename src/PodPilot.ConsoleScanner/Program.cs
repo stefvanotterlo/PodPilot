@@ -10,6 +10,53 @@ using PodPilot.Core.Scanning;
 
 Console.OutputEncoding = Encoding.UTF8;
 
+// --handsfree [off|on]: de "Hands-Free"-endpoints (belprofiel) van de AirPods tonen, of uit/aan zetten.
+var handsFreeIndex = Array.IndexOf(args, "--handsfree");
+if (handsFreeIndex >= 0)
+{
+    var airPods = (await AudioDevices.GetAsync()).FirstOrDefault();
+    if (airPods is null)
+    {
+        Console.WriteLine("Geen Bluetooth-audioapparaat gevonden.");
+        return;
+    }
+
+    var action = handsFreeIndex + 1 < args.Length ? args[handsFreeIndex + 1] : "";
+    foreach (var e in AudioOutputs.GetHandsFreeEndpoints(airPods.ContainerId))
+    {
+        if (action is "off" or "on")
+            Console.WriteLine($"{(action == "off" ? "Uitzetten" : "Aanzetten")}: {e.Name} → HRESULT 0x{AudioOutputs.SetEnabled(e.Id, action == "on"):X8}");
+    }
+    foreach (var e in AudioOutputs.GetHandsFreeEndpoints(airPods.ContainerId))
+        Console.WriteLine($"  {(e.IsCapture ? "microfoon" : "uitgang  ")} {e.Name}  status 0x{e.State:X}{(e.IsDisabled ? " (uitgeschakeld)" : "")}");
+    return;
+}
+
+// --devices: alle gepairde Bluetooth-audioapparaten, verbonden of niet, met batterij (als bekend).
+if (args.Contains("--devices"))
+{
+    foreach (var d in await AudioDevices.GetAsync())
+        Console.WriteLine($"• {d.Name}  {(d.IsConnected ? "verbonden" : "niet verbonden")}  " +
+                          $"batterij {(d.BatteryPercent is int b ? $"{b}%" : "onbekend")}  container {d.ContainerId}");
+    return;
+}
+
+// --outputs: toont de geluidsuitgangen en welke de standaard is; "--outputs --set <nr>" maakt
+// uitgang <nr> de standaard (test voor het wisselen van de geluidsuitgang).
+if (args.Contains("--outputs"))
+{
+    var outputs = AudioOutputs.GetActive();
+    var setIndex = Array.IndexOf(args, "--set");
+    if (setIndex >= 0 && setIndex + 1 < args.Length && int.TryParse(args[setIndex + 1], out var nr)
+        && nr >= 1 && nr <= outputs.Count)
+        Console.WriteLine($"Standaard maken: {outputs[nr - 1].Name} → {(AudioOutputs.SetDefault(outputs[nr - 1].Id) ? "gelukt" : "mislukt")}");
+
+    var defaultId = AudioOutputs.GetDefaultId();
+    for (var i = 0; i < outputs.Count; i++)
+        Console.WriteLine($"{i + 1}. {outputs[i].Name}{(outputs[i].Id == defaultId ? "   ← standaard" : "")}");
+    return;
+}
+
 // --- Argumenten -------------------------------------------------------------------------
 short minRssi = -70;
 var anyModel = args.Contains("--any-model");

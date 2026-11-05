@@ -15,12 +15,14 @@ Je AirPods moeten al met de pc gekoppeld zijn via de Bluetooth-instellingen van 
 
 ## Wat kan het?
 
-- Batterij van links, rechts en de case, ook als je de case opent
-- Verbinden en verbreken met één klik, of automatisch
-- Muziek pauzeren als je een oordop uitdoet
+- Batterij van links, rechts en de case, ook als je de case opent, en als getal in het systeemvak
+- Verbinden en verbreken met één klik, met een sneltoets of automatisch
+- Muziek pauzeren als je een oordop uitdoet, en het geluid automatisch naar je AirPods zetten
 - Melding als de batterij bijna leeg is
+- Al je Bluetooth-koptelefoons op één plek, en je pc als speaker voor je telefoon
+- Eigen kleuren, licht of donker, Nederlands of Engels
 
-Werkt op Windows 10 en 11. Geen account of internet nodig.
+Werkt op Windows 10 en 11. Geen account nodig; alleen voor updates kijkt PodPilot op GitHub.
 
 ---
 

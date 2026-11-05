@@ -16,17 +16,21 @@ namespace PodPilot.App;
 /// </summary>
 public partial class App : Application
 {
-    private const string SearchingText = "Zoeken… open de case of doe de AirPods in";
-    private const string UnknownText = "Geen signaal: status onbekend";
+    private static string SearchingText => L.T("Zoeken… open de case of doe de AirPods in");
+    private static string UnknownText => L.T("Geen signaal: status onbekend");
 
     private Mutex? _singleInstance;
     private AirPodsScanner? _scanner;
     private TrayIconService? _tray;
     private GlobalHotkey? _popupHotkey;
+    private GlobalHotkey? _connectHotkey;
+    private GlobalHotkey? _outputHotkey;
+    private readonly StreamingService _streaming = new();
     private PopupWindow? _popup;
     private PairedAppleDevice? _device;
     private DeviceConnectionMonitor? _connection;
-    private readonly StatusViewModel _status = new();
+    // Pas gemaakt na het kiezen van de taal (OnStartup), anders blijven "Links/Rechts" Nederlands.
+    private StatusViewModel _status = null!;
     private readonly LidOpenDetector _lidDetector = new();
     private readonly LowBatteryMonitor _lowBattery = new();
     private readonly EarDetectionMonitor _ears = new();
@@ -51,6 +55,9 @@ public partial class App : Application
 
         DiagnosticLog.Start();
         _settings = AppSettings.Load();
+        // Taal vóór alle vensters kiezen; wisselen werkt na herstarten.
+        L.Init(_settings.Language);
+        _status = new StatusViewModel();
         try
         {
             _history = new BatteryHistory(Path.Combine(Environment.GetFolderPath(
@@ -77,16 +84,47 @@ public partial class App : Application
         ThemeManager.ApplyTo(_popup, _settings.PopupTheme);
         _popup.ConnectToggleRequested += async (_, _) => await ToggleConnectionAsync();
         _popup.SettingsRequested += (_, _) => OpenMainWindow(MainPage.Settings);
+        ApplyPopupPosition();
+        _popup.PositionChanged += (_, p) =>
+        {
+            // Versleept. Moet de plek niet onthouden worden, dan staat hij de volgende keer weer
+            // rechtsonder (deze keer blijft hij waar je hem neerzette).
+            if (!_settings.RememberPopupPosition)
+            {
+                ApplyPopupPosition();
+                DiagnosticLog.Write($"pop-up versleept naar {p.X},{p.Y} (niet onthouden)");
+                return;
+            }
+
+            _settings.PopupX = p.X;
+            _settings.PopupY = p.Y;
+            _settings.Save();
+            _mainWindow?.RefreshPopupPosition();
+            DiagnosticLog.Write($"pop-up versleept naar {p.X},{p.Y}");
+        };
         _tray = new TrayIconService();
+        UpdateTrayAppearance();
+        // Of het geluid via de AirPods gaat, kan op elk moment veranderen (ook via Windows zelf).
+        _outputWatch.Tick += (_, _) => UpdateTrayAppearance();
+        _outputWatch.Start();
         _tray.OpenRequested += (_, _) => TogglePopup();
-        _tray.MainWindowRequested += (_, _) => OpenMainWindow(MainPage.Overview);
-        _tray.SettingsRequested += (_, _) => OpenMainWindow(MainPage.Settings);
-        _tray.ExitRequested += (_, _) => Shutdown();
+        _tray.MenuRequested += (_, _) => ShowTrayMenu();
         UpdateTray();
 
         _popupHotkey = new GlobalHotkey();
         _popupHotkey.Pressed += (_, _) => TogglePopup();
         ApplyPopupHotkey(_settings.PopupHotkeyEnabled ? Hotkey.Parse(_settings.PopupHotkey) : null);
+
+        _connectHotkey = new GlobalHotkey();
+        _connectHotkey.Pressed += async (_, _) => await ToggleConnectionAsync();
+        ApplyConnectHotkey(_settings.ConnectHotkeyEnabled ? Hotkey.Parse(_settings.ConnectHotkey) : null);
+
+        // De telefoon kan het streamen ook zelf stoppen: dan het venster bijwerken.
+        _streaming.StateChanged += (_, _) => OnUiThread(() => _mainWindow?.ShowStreamState());
+
+        _outputHotkey = new GlobalHotkey();
+        _outputHotkey.Pressed += (_, _) => SwitchToNextOutput();
+        ApplyOutputHotkey(_settings.SwitchOutputHotkeyEnabled ? Hotkey.Parse(_settings.SwitchOutputHotkey) : null);
 
         _scanner = new AirPodsScanner();
         _scanner.StatusUpdated += (_, s) => OnUiThread(() => ApplyStatus(s));
@@ -95,11 +133,14 @@ public partial class App : Application
         {
             // Success = wij hebben zelf gestopt (bij afsluiten).
             if (error != BluetoothError.Success)
-                OnUiThread(() => MarkUnknown("Bluetooth staat uit of is niet beschikbaar"));
+                OnUiThread(() => MarkUnknown(L.T("Bluetooth staat uit of is niet beschikbaar")));
         };
 
         await ConfigureForPairedDeviceAsync(_scanner);
         _scanner.Start();
+
+        if (_settings.CheckForUpdates)
+            _ = CheckForUpdatesAsync(notify: true);
 
         // "PodPilot.exe --show" opent de pop-up meteen (handig bij testen), "--main" het hoofdvenster
         // en "--settings" het hoofdvenster op het tabblad Instellingen.
@@ -109,11 +150,18 @@ public partial class App : Application
             OpenMainWindow(MainPage.Overview);
         if (e.Args.Contains("--settings"))
             OpenMainWindow(MainPage.Settings);
+        // "--tray-menu" opent het menu van het tray-icoon op de plek van de muis (om te testen).
+        if (e.Args.Contains("--tray-menu"))
+            ShowTrayMenu();
+        // "--test-toast" toont de melding van het wisselen van de geluidsuitgang, zonder te wisselen.
+        if (e.Args.Contains("--test-toast"))
+            OutputToast.Show(L.T("Geluid via: {0}", AudioOutputs.GetActive().FirstOrDefault(o => o.Id == AudioOutputs.GetDefaultId())?.Name),
+                ThemeManager.CreateColorsFor(_settings.PopupTheme));
 
         // "PodPilot.exe --test-notification" toont een voorbeeld van de melding bij lage batterij.
         if (e.Args.Contains("--test-notification"))
             NotificationService.ShowLowBattery(_status.DeviceName,
-                [new LowBatteryItem("Links", _settings.LowBatteryThreshold), new LowBatteryItem("Rechts", 10)]);
+                [new LowBatteryItem(L.T("Links"), _settings.LowBatteryThreshold), new LowBatteryItem(L.T("Rechts"), 10)]);
     }
 
     /// <summary>
@@ -126,7 +174,7 @@ public partial class App : Application
         IReadOnlyList<PairedAppleDevice> paired = [];
         try
         {
-            paired = await PairedDeviceService.GetPairedAppleDevicesAsync();
+            paired = await GetPairedHeadphonesAsync();
         }
         catch (Exception)
         {
@@ -144,6 +192,7 @@ public partial class App : Application
         _connection?.Dispose();
         _connection = null;
         _device = device;
+        _lastAudioActive = null;
 
         if (device is null)
         {
@@ -163,7 +212,14 @@ public partial class App : Application
             // Bij elke wijziging van de Bluetooth-verbinding de audiostatus opnieuw bepalen.
             _connection = await DeviceConnectionMonitor.CreateAsync(device.DeviceId);
             if (_connection is not null)
-                _connection.ConnectionChanged += (_, _) => OnUiThread(async () => await RefreshConnectionAsync(delay: true));
+                _connection.ConnectionChanged += (_, connected) => OnUiThread(async () =>
+                {
+                    // Bluetooth weg terwijl de audio liep: meteen pauzeren, niet pas na de controle
+                    // hieronder (anders klinkt er even muziek uit de laptopluidsprekers).
+                    if (!connected && _status.IsConnected)
+                        await PauseAfterDisconnectAsync();
+                    await RefreshConnectionAsync(delay: true);
+                });
 
             await RefreshConnectionAsync(delay: false);
         }
@@ -171,6 +227,17 @@ public partial class App : Application
         {
             _status.SetConnection(isPaired: true, isConnected: false);
         }
+    }
+
+    /// <summary>
+    /// Gekoppelde Apple-apparaten die een geluidsuitgang hebben: AirPods en Beats, geen iPhone, iPad
+    /// of Mac (die zijn ook Apple, maar geen koptelefoon). Zo kiest "Automatisch" nooit je telefoon.
+    /// </summary>
+    private static async Task<IReadOnlyList<PairedAppleDevice>> GetPairedHeadphonesAsync()
+    {
+        var paired = await PairedDeviceService.GetPairedAppleDevicesAsync();
+        var withAudio = (await AudioDevices.GetAsync()).Select(d => d.ContainerId).ToHashSet();
+        return paired.Where(d => d.ContainerId is Guid c && withAudio.Contains(c)).ToList();
     }
 
     // --- Hoofdvenster -------------------------------------------------------------------
@@ -193,7 +260,7 @@ public partial class App : Application
         IReadOnlyList<PairedAppleDevice> devices = [];
         try
         {
-            devices = await PairedDeviceService.GetPairedAppleDevicesAsync();
+            devices = await GetPairedHeadphonesAsync();
         }
         catch (Exception)
         {
@@ -201,23 +268,25 @@ public partial class App : Application
         }
 
         var previousDevice = _settings.PreferredDeviceId;
-        _mainWindow = new Views.MainWindow(_status, _settings, devices, ApplyPopupHotkey);
+        _mainWindow = new Views.MainWindow(_status, _settings, devices, ApplyPopupHotkey, ApplyConnectHotkey,
+            ApplyOutputHotkey);
         ThemeManager.ApplyTo(_mainWindow, _settings.Theme);
         _mainWindow.ShowPage(page);
         _mainWindow.ConnectToggleRequested += async (_, _) => await ToggleConnectionAsync();
+        _mainWindow.CheckUpdatesRequested += async (_, _) => await CheckForUpdatesAsync(notify: false);
+        _mainWindow.InstallUpdateRequested += async (_, _) => await InstallUpdateAsync();
+        _mainWindow.ResetRequested += (_, _) => ResetSettings();
+        _mainWindow.PodPilotContainerId = _device?.ContainerId;
+        _mainWindow.Streaming = _streaming;
+        _mainWindow.DeviceToggleHandler = ToggleDeviceAsync;
+        ShowUpdateState();
+        // Alleen in dit hoofdvenster en alleen zolang het open is: sluiten = weg.
         _mainWindow.EasterEggTriggered += (_, _) =>
         {
-            _easterEggActive = true;
-            DiagnosticLog.Write("verborgen achtergrond aan (tot afsluiten)");
+            DiagnosticLog.Write("verborgen achtergrond aan (tot het hoofdvenster sluit)");
             ApplyEasterEgg(_mainWindow);
-            ApplyEasterEgg(_popup);
             _mainWindow?.HideAboutContent();
         };
-        if (_easterEggActive)
-        {
-            ApplyEasterEgg(_mainWindow);
-            _mainWindow.HideAboutContent();
-        }
         _mainWindow.SettingsChanged += async (_, _) =>
         {
             ApplySettings();
@@ -232,12 +301,10 @@ public partial class App : Application
         _mainWindow.Activate();
     }
 
-    // Verborgen achtergrond: staat alleen in het geheugen, dus na afsluiten is hij weg.
-    private bool _easterEggActive;
-
     /// <summary>
-    /// Zet de verborgen foto als achtergrond van een venster. Sleutels direct in Window.Resources
-    /// gaan vóór de kleurendictionary van het thema, dus ook na een themawissel blijft hij staan.
+    /// Zet de verborgen foto als achtergrond van het hoofdvenster (nooit de pop-up). Sleutels direct
+    /// in Window.Resources gaan vóór de kleurendictionary van het thema, dus ook na een themawissel
+    /// blijft hij staan. Een nieuw hoofdvenster heeft ze niet: na sluiten is de foto weg.
     /// </summary>
     private static void ApplyEasterEgg(Window? window)
     {
@@ -254,12 +321,139 @@ public partial class App : Application
         window.Resources["WindowBackground"] = photo;
     }
 
-    /// <summary>Zet de sneltoets voor de pop-up (null = uit). Geeft false als een andere app hem al gebruikt.</summary>
-    private bool ApplyPopupHotkey(Hotkey? hotkey)
+    /// <summary>
+    /// Verbinden of verbreken vanaf het tabblad Apparaten. De AirPods van PodPilot gaan via de gewone
+    /// route (met de opties zoals automatisch afspelen); andere apparaten via dezelfde techniek:
+    /// wekken, het verzoek op het Bluetooth-audiofilter, en wachten tot het geluid (niet) actief is.
+    /// </summary>
+    private async Task<bool> ToggleDeviceAsync(AudioDevice device, bool connect)
     {
-        var ok = _popupHotkey?.Set(hotkey) ?? false;
+        if (device.ContainerId == _device?.ContainerId)
+        {
+            if (_status.IsConnected != connect)
+                await ToggleConnectionAsync();
+            return _status.IsConnected == connect;
+        }
+
+        DiagnosticLog.Write($"apparaten: {(connect ? "verbinden met" : "verbreken van")} {device.Name}");
+        bool ok;
+        if (connect)
+        {
+            using (var monitor = await DeviceConnectionMonitor.CreateAsync(device.DeviceId))
+            {
+                if (monitor is not null)
+                    await monitor.WakeAsync();
+            }
+
+            ok = await BluetoothAudioConnector.ConnectAsync(device.ContainerId, device.Name) == AudioConnectResult.Requested
+                 && await BluetoothAudioConnector.WaitForAudioAsync(device.ContainerId, device.Name, active: true, TimeSpan.FromSeconds(10));
+        }
+        else
+        {
+            ok = await BluetoothAudioConnector.DisconnectAsync(device.ContainerId, device.Name) == AudioConnectResult.Requested
+                 && await BluetoothAudioConnector.WaitForAudioAsync(device.ContainerId, device.Name, active: false, TimeSpan.FromSeconds(6));
+        }
+
+        DiagnosticLog.Write($"apparaten: {device.Name} → {(ok ? "gelukt" : "mislukt")}");
+        return ok;
+    }
+
+    /// <summary>
+    /// Alle instellingen terug naar de standaard (settings.json opnieuw). "Starten met Windows" staat
+    /// in de registry en blijft zoals het is. Het hoofdvenster gaat opnieuw open met de nieuwe waarden.
+    /// </summary>
+    private void ResetSettings()
+    {
+        DiagnosticLog.Write("instellingen: terug naar standaard");
+        _settings = new AppSettings();
+        _settings.Save();
+
+        ApplySettings();
+        ApplyPopupHotkey(null);
+        ApplyConnectHotkey(null);
+        ApplyOutputHotkey(null);
+
+        _mainWindow?.Close();
+        OpenMainWindow(MainPage.Settings);
+    }
+
+    // --- Updates -----------------------------------------------------------------------
+
+    private UpdateInfo? _availableUpdate;
+
+    /// <summary>
+    /// Kijkt op GitHub of er een nieuwere versie is en toont dat op het tabblad Over. Met
+    /// <paramref name="notify"/> komt er ook een Windows-melding, maar maar één keer per versie.
+    /// </summary>
+    private async Task CheckForUpdatesAsync(bool notify)
+    {
+        _mainWindow?.SetUpdateState(L.T("Zoeken naar updates…"), canInstall: false, busy: true);
+        try
+        {
+            _availableUpdate = await UpdateService.CheckAsync();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write($"updates: zoeken mislukt: {ex.Message}");
+            _mainWindow?.SetUpdateState(L.T("Zoeken lukt niet. Is er internet?"), canInstall: false, busy: false);
+            return;
+        }
+
+        ShowUpdateState();
+        if (notify && _availableUpdate is { } update && _settings.UpdateNotifiedVersion != update.Version.ToString())
+        {
+            _settings.UpdateNotifiedVersion = update.Version.ToString();
+            _settings.Save();
+            NotificationService.ShowUpdateAvailable(update.Version, () => OnUiThread(() => OpenMainWindow(MainPage.About)));
+        }
+    }
+
+    private void ShowUpdateState() => _mainWindow?.SetUpdateState(
+        _availableUpdate is { } update
+            ? L.T("Versie {0} is beschikbaar (je hebt {1}).", update.Version, UpdateService.CurrentVersion)
+            : L.T("Je hebt de nieuwste versie ({0}).", UpdateService.CurrentVersion),
+        canInstall: _availableUpdate is not null, busy: false);
+
+    /// <summary>"Bijwerken": downloaden, stil installeren en opnieuw starten.</summary>
+    private async Task InstallUpdateAsync()
+    {
+        if (_availableUpdate is not { } update)
+            return;
+
+        try
+        {
+            var progress = new Progress<double>(p =>
+                _mainWindow?.SetUpdateState(L.T("Downloaden… {0:P0}", p), canInstall: false, busy: true));
+            _mainWindow?.SetUpdateState(L.T("Downloaden…"), canInstall: false, busy: true);
+            await UpdateService.StartInstallAsync(update, progress);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write($"updates: bijwerken mislukt: {ex.Message}");
+            _mainWindow?.SetUpdateState(L.T("Bijwerken lukt niet. Probeer het later opnieuw."), canInstall: true, busy: false);
+            return;
+        }
+
+        // De installer vervangt de exe; die moet daarvoor dicht zijn. Daarna start hij PodPilot opnieuw.
+        _mainWindow?.SetUpdateState(L.T("Installeren… PodPilot start zo opnieuw."), canInstall: false, busy: true);
+        await Task.Delay(500);
+        Shutdown();
+    }
+
+    /// <summary>Zet de sneltoets voor de pop-up (null = uit). Geeft false als hij al in gebruik is.</summary>
+    private bool ApplyPopupHotkey(Hotkey? hotkey) => ApplyHotkey(_popupHotkey, hotkey, "pop-up");
+
+    /// <summary>Zet de sneltoets voor verbinden/verbreken (null = uit). Geeft false als hij al in gebruik is.</summary>
+    private bool ApplyConnectHotkey(Hotkey? hotkey) => ApplyHotkey(_connectHotkey, hotkey, "verbinden");
+
+    /// <summary>Zet de sneltoets voor het wisselen van de geluidsuitgang (null = uit).</summary>
+    private bool ApplyOutputHotkey(Hotkey? hotkey) => ApplyHotkey(_outputHotkey, hotkey, "geluidsuitgang");
+
+    private static bool ApplyHotkey(GlobalHotkey? target, Hotkey? hotkey, string name)
+    {
+        var ok = target?.Set(hotkey) ?? false;
         if (hotkey is not null)
-            DiagnosticLog.Write($"sneltoets pop-up {hotkey}: {(ok ? "actief" : "al in gebruik door een andere app")}");
+            DiagnosticLog.Write($"sneltoets {name} {hotkey}: {(ok ? "actief" : "al in gebruik")}");
         return ok;
     }
 
@@ -267,13 +461,44 @@ public partial class App : Application
     private void ApplySettings()
     {
         ApplyThemes();
+        UpdateTrayAppearance();
+        ApplyPopupPosition();
         _lowBattery.Threshold = _settings.NotifyLowBattery ? _settings.LowBatteryThreshold : 0;
+    }
+
+    /// <summary>De bewaarde plek van de pop-up doorgeven (geen, of niet onthouden = rechtsonder).</summary>
+    private void ApplyPopupPosition()
+    {
+        if (_popup is not null)
+            _popup.CustomPosition = _settings.RememberPopupPosition && _settings.PopupX is int x && _settings.PopupY is int y
+                ? new System.Drawing.Point(x, y)
+                : null;
     }
 
     /// <summary>
     /// Hoofdvenster en pop-up hebben elk een eigen thema. Het thema van het hoofdvenster is ook de
     /// standaard voor de rest (tooltips en dergelijke).
     /// </summary>
+    private readonly System.Windows.Threading.DispatcherTimer _outputWatch = new() { Interval = TimeSpan.FromSeconds(2) };
+
+    /// <summary>
+    /// Stijl van het tray-icoon uit de instellingen, en gedimd als dat aanstaat en het geluid niet
+    /// via de AirPods gaat (bijv. via de laptopluidspreker).
+    /// </summary>
+    private void UpdateTrayAppearance()
+    {
+        var dimmed = _settings.TrayDimWhenNotAirPods && !OutputIsAirPods();
+        _tray?.SetAppearance(TrayIconOptions.From(_settings), dimmed);
+    }
+
+    private bool OutputIsAirPods()
+    {
+        if (_device?.ContainerId is not Guid containerId)
+            return false;
+        var defaultId = AudioOutputs.GetDefaultId();
+        return AudioOutputs.GetActive().Any(o => o.Id == defaultId && o.ContainerId == containerId);
+    }
+
     private void ApplyThemes()
     {
         ThemeManager.CustomBackground = _settings.UseCustomBackground ? ThemeManager.ParseColor(_settings.CustomBackground) : null;
@@ -302,6 +527,69 @@ public partial class App : Application
         var active = await BluetoothAudioConnector.IsAudioActiveAsync(containerId, _device.Name);
         DiagnosticLog.Write($"verbinding: audio {(active ? "verbonden" : "niet verbonden")}");
         _status.SetConnection(isPaired: true, isConnected: active);
+
+        // Alleen echte overgangen tellen: bij het opstarten (of na wisselen van AirPods) is de
+        // vorige stand onbekend, en dan moet er niet ineens muziek gaan spelen.
+        var previous = _lastAudioActive;
+        _lastAudioActive = active;
+        if (previous == false && active)
+        {
+            if (_settings.SwitchOutputOnConnect)
+                SwitchOutputToDevice(containerId);
+
+            if (_settings.AutoPlayOnConnect)
+            {
+                // Even wachten tot Windows het geluid naar de AirPods heeft omgezet.
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                await _media.PlayCurrentAsync();
+            }
+        }
+        else if (previous == true && !active)
+        {
+            await PauseAfterDisconnectAsync();
+        }
+    }
+
+    // Laatst bekende audiostatus; null = nog onbekend (net gestart of andere AirPods gekozen).
+    private bool? _lastAudioActive;
+
+    /// <summary>Maakt de stereo-uitgang van de AirPods het standaard-afspeelapparaat.</summary>
+    private static void SwitchOutputToDevice(Guid containerId)
+    {
+        if (AudioOutputs.FindForDevice(containerId) is not { } output)
+        {
+            DiagnosticLog.Write("geluid: geen uitgang van de AirPods gevonden");
+            return;
+        }
+
+        if (AudioOutputs.GetDefaultId() == output.Id)
+            return;
+
+        DiagnosticLog.Write($"geluid: naar {output.Name} → {(AudioOutputs.SetDefault(output.Id) ? "gelukt" : "mislukt")}");
+    }
+
+    /// <summary>Sneltoets: naar de volgende geluidsuitgang, met een korte melding in beeld.</summary>
+    private void SwitchToNextOutput()
+    {
+        if (AudioOutputs.Next() is not { } next)
+            return;
+
+        var ok = AudioOutputs.SetDefault(next.Id);
+        DiagnosticLog.Write($"geluid: sneltoets, naar {next.Name} → {(ok ? "gelukt" : "mislukt")}");
+        OutputToast.Show(ok ? L.T("Geluid via: {0}", next.Name) : L.T("Wisselen naar {0} lukt niet", next.Name),
+            ThemeManager.CreateColorsFor(_settings.PopupTheme));
+    }
+
+    /// <summary>Pauzeert alles wat speelt als de AirPods loskomen (als die optie aan staat).</summary>
+    private async Task PauseAfterDisconnectAsync()
+    {
+        if (!_settings.AutoPauseOnDisconnect)
+            return;
+
+        DiagnosticLog.Write("media: AirPods niet meer verbonden, pauzeren");
+        await _media.PauseIfPlayingAsync();
+        // Niet later "hervatten" bij het indoen: dit was geen pauze door oordetectie.
+        _media.Forget();
     }
 
     /// <summary>
@@ -320,7 +608,9 @@ public partial class App : Application
         if (!_status.IsConnected)
         {
             _autoConnectSuppressed = false;
-            if (!await ConnectAsync(_device, containerId, _connection, automatic: false))
+            // Bluetooth-instellingen alleen als de AirPods wel in beeld zijn; anders staat er in de
+            // pop-up dat je de case moet openen.
+            if (!await ConnectAsync(_device, containerId, _connection, automatic: false) && _status.IsKnown)
                 WindowsSettings.OpenBluetooth();
             return;
         }
@@ -328,13 +618,13 @@ public partial class App : Application
         // Zelf verbroken: niet meteen weer automatisch verbinden, pas als de AirPods een keer
         // uit beeld zijn geweest (case dicht).
         _autoConnectSuppressed = true;
-        _status.SetBusy(true, "Verbinding verbreken…");
+        _status.SetBusy(true, L.T("Verbinding verbreken…"));
         var result = await BluetoothAudioConnector.DisconnectAsync(containerId, _device.Name);
         var succeeded = result == AudioConnectResult.Requested
                         && await BluetoothAudioConnector.WaitForAudioAsync(containerId, _device.Name,
                                active: false, TimeSpan.FromSeconds(6));
 
-        _status.SetBusy(false, succeeded ? null : "Verbreken lukt niet; gebruik Instellingen");
+        _status.SetBusy(false, succeeded ? null : L.T("Verbreken lukt niet; gebruik Instellingen"));
         await RefreshConnectionAsync(delay: false);
 
         if (!succeeded)
@@ -345,7 +635,8 @@ public partial class App : Application
     private async Task<bool> ConnectAsync(PairedAppleDevice device, Guid containerId,
         DeviceConnectionMonitor connection, bool automatic)
     {
-        _status.SetBusy(true, automatic ? "Automatisch verbinden…" : "Verbinden…");
+        _status.SetBusy(true, automatic ? L.T("Automatisch verbinden…") : L.T("Verbinden…"));
+        DiagnosticLog.Write($"verbinden ({(automatic ? "automatisch" : "knop")}): start");
 
         // Eerst een Bluetooth-verbinding forceren; sommige drivers (Intel Smart Sound) negeren
         // het audioverzoek anders.
@@ -355,10 +646,15 @@ public partial class App : Application
                         && await BluetoothAudioConnector.WaitForAudioAsync(containerId, device.Name,
                                active: true, TimeSpan.FromSeconds(10));
 
+        // Geen advertenties = de AirPods slapen (dichte case) of zijn buiten bereik: dan helpen de
+        // Bluetooth-instellingen niet, maar de case openen wel.
         _status.SetBusy(false, succeeded ? null
-            : automatic ? "Automatisch verbinden lukt niet"
-            : "Lukt niet; verbind via Instellingen");
+            : !_status.IsKnown ? L.T("Open de case of doe de AirPods in, en probeer opnieuw")
+            : automatic ? L.T("Automatisch verbinden lukt niet")
+            : L.T("Lukt niet; verbind via Instellingen"));
         await RefreshConnectionAsync(delay: false);
+        DiagnosticLog.Write($"verbinden ({(automatic ? "automatisch" : "knop")}): " +
+                            $"{(succeeded ? "gelukt" : $"mislukt, verzoek {result}, AirPods {(_status.IsKnown ? "in beeld" : "niet in beeld")}")}");
         return succeeded;
     }
 
@@ -487,6 +783,40 @@ public partial class App : Application
         UpdateTray();
     }
 
+    /// <summary>
+    /// Menu onder de rechtermuisknop van het tray-icoon. Wordt elke keer opnieuw opgebouwd, zodat
+    /// "Verbinden"/"Verbinding verbreken" en de sneltoets kloppen. Thema = dat van de pop-up.
+    /// </summary>
+    private void ShowTrayMenu()
+    {
+        _popup?.HidePopup();
+        var popupHotkey = _settings.PopupHotkeyEnabled ? Hotkey.Parse(_settings.PopupHotkey)?.ToString() : null;
+        var connectHotkey = _settings.ConnectHotkeyEnabled ? Hotkey.Parse(_settings.ConnectHotkey)?.ToString() : null;
+        var connectText = !_status.IsPaired ? L.T("Koppelen…")
+            : _status.IsConnected ? L.T("Verbinding verbreken met {0}", _status.DeviceName)
+            : L.T("Verbinden met {0}", _status.DeviceName);
+
+        // E7F6 = koptelefoon, E8A7 = venster openen, E71B = koppeling, E713 = tandwiel,
+        // E702 = Bluetooth, E7E8 = aan/uit-knop
+        TrayMenu.Show(
+        [
+            new TrayMenuEntry("", L.T("Status tonen"), popupHotkey, () => _popup?.ShowAtCorner()),
+            new TrayMenuEntry("", L.T("PodPilot openen"), null, () => OpenMainWindow(MainPage.Overview)),
+            null,
+            new TrayMenuEntry("", connectText, connectHotkey, async () => await ToggleConnectionAsync(),
+                _status.CanToggleConnection),
+            // E7F5 = luidspreker; alleen zolang een telefoon via de pc afspeelt.
+            .. (_streaming.Active is { } stream
+                ? new TrayMenuEntry?[] { new("", L.T("Streamen van {0} stoppen", stream.Name), null, _streaming.Disconnect) }
+                : []),
+            null,
+            new TrayMenuEntry("", L.T("Instellingen"), null, () => OpenMainWindow(MainPage.Settings)),
+            new TrayMenuEntry("", L.T("Bluetooth-instellingen"), null, WindowsSettings.OpenBluetooth),
+            null,
+            new TrayMenuEntry("", L.T("Afsluiten"), null, Shutdown),
+        ], ThemeManager.CreateColorsFor(_settings.PopupTheme));
+    }
+
     private void UpdateTray() => _tray?.Update(_status.TooltipText, _status.LowestPercent);
 
     private void TogglePopup()
@@ -521,6 +851,9 @@ public partial class App : Application
         _scanner?.Dispose();
         _connection?.Dispose();
         _popupHotkey?.Dispose();
+        _connectHotkey?.Dispose();
+        _outputHotkey?.Dispose();
+        _streaming.Dispose();
         _tray?.Dispose();
         if (_popup is not null)
         {

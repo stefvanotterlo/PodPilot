@@ -34,6 +34,21 @@ public sealed class AppSettings
     /// <summary>Weer afspelen als je de oordop terug in je oor doet.</summary>
     public bool AutoResumeOnEarInsertion { get; set; } = true;
 
+    /// <summary>"Afspelen" sturen zodra de audio van de AirPods met deze pc verbonden is.</summary>
+    public bool AutoPlayOnConnect { get; set; }
+
+    /// <summary>Alles pauzeren zodra de AirPods niet meer verbonden zijn (geen muziek uit de luidsprekers).</summary>
+    public bool AutoPauseOnDisconnect { get; set; }
+
+    /// <summary>De AirPods het standaard-afspeelapparaat maken zodra ze verbonden zijn.</summary>
+    public bool SwitchOutputOnConnect { get; set; }
+
+    /// <summary>Sneltoets om naar de volgende geluidsuitgang te wisselen.</summary>
+    public bool SwitchOutputHotkeyEnabled { get; set; }
+
+    /// <summary>De combinatie voor het wisselen van de geluidsuitgang. Blijft bewaard als hij uit staat.</summary>
+    public string? SwitchOutputHotkey { get; set; }
+
     /// <summary>Audio automatisch met deze pc verbinden als de case opengaat.</summary>
     public bool AutoConnectOnLidOpen { get; set; }
 
@@ -46,11 +61,60 @@ public sealed class AppSettings
     /// <summary>De combinatie, bijv. "Ctrl+Alt+P". Blijft bewaard als de sneltoets uit staat.</summary>
     public string? PopupHotkey { get; set; }
 
+    /// <summary>Sneltoets om te verbinden of de verbinding te verbreken.</summary>
+    public bool ConnectHotkeyEnabled { get; set; }
+
+    /// <summary>De combinatie voor verbinden/verbreken. Blijft bewaard als de sneltoets uit staat.</summary>
+    public string? ConnectHotkey { get; set; }
+
+    /// <summary>Taal van de app; wisselen werkt na herstarten.</summary>
+    public AppLanguage Language { get; set; } = AppLanguage.System;
+
+    /// <summary>Laatst gekozen telefoon voor "pc als speaker" (apparaat-ID van Windows).</summary>
+    public string? StreamSourceId { get; set; }
+
+    /// <summary>Bij het opstarten op GitHub kijken of er een nieuwere versie is.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>Voor deze versie is al een melding getoond (niet bij elke start opnieuw).</summary>
+    public string? UpdateNotifiedVersion { get; set; }
+
+    /// <summary>Hoe het tray-icoon de batterij toont.</summary>
+    public TrayIconStyle TrayStyle { get; set; } = TrayIconStyle.Icon;
+
+    /// <summary>Lettertype voor de stijl "Getal".</summary>
+    public string TrayFont { get; set; } = "Segoe UI";
+
+    public TrayFontSize TrayFontSize { get; set; } = TrayFontSize.Normal;
+
+    /// <summary>Kleur van het getal bij een lichte taakbalk: "auto", "level" (batterijkleur) of "#RRGGBB".</summary>
+    public string TrayColorLight { get; set; } = "auto";
+
+    /// <summary>Kleur van het getal bij een donkere taakbalk: "auto", "level" of "#RRGGBB".</summary>
+    public string TrayColorDark { get; set; } = "auto";
+
+    /// <summary>Icoon doorzichtig als het geluid niet via de AirPods gaat.</summary>
+    public bool TrayDimWhenNotAirPods { get; set; }
+
+    /// <summary>Zichtbaarheid van het icoon in procenten als het doorzichtig is (10–90).</summary>
+    public int TrayDimOpacity { get; set; } = 40;
+
     /// <summary>Thema van het hoofdvenster.</summary>
     public AppTheme Theme { get; set; } = AppTheme.System;
 
     /// <summary>Thema van de pop-up bij het systeemvak (los van het hoofdvenster te kiezen).</summary>
     public AppTheme PopupTheme { get; set; } = AppTheme.System;
+
+    /// <summary>
+    /// True: een versleepte pop-up blijft op die plek (ook na herstarten). False: slepen kan wel,
+    /// maar de volgende keer staat hij weer rechtsonder. De bewaarde plek blijft dan staan.
+    /// </summary>
+    public bool RememberPopupPosition { get; set; } = true;
+
+    /// <summary>Zelf gekozen plek van de pop-up (linkerbovenhoek, schermpixels); null = rechtsonder.</summary>
+    public int? PopupX { get; set; }
+
+    public int? PopupY { get; set; }
 
     /// <summary>Eigen achtergrondkleur voor de hele app (in plaats van licht/donker).</summary>
     public bool UseCustomBackground { get; set; }

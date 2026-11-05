@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
@@ -62,10 +64,7 @@ public partial class PopupWindow : Window
         ShowActivated = activate;
         Show();
         UpdateLayout();
-
-        var area = SystemParameters.WorkArea;
-        Left = area.Right - ActualWidth;
-        Top = area.Bottom - ActualHeight;
+        PlaceOnScreen(nearCursor: activate);
 
         if (activate)
             Activate();
@@ -77,6 +76,95 @@ public partial class PopupWindow : Window
         SlideTransform.BeginAnimation(TranslateTransform.YProperty,
             new DoubleAnimation(24, 0, AnimationDuration) { EasingFunction = ease });
     }
+
+    // --- Positie --------------------------------------------------------------------------
+
+    /// <summary>
+    /// Zelf gekozen plek (linkerbovenhoek in schermpixels), of null = rechtsonder. Wordt gezet als
+    /// je de pop-up versleept.
+    /// </summary>
+    public System.Drawing.Point? CustomPosition { get; set; }
+
+    /// <summary>De pop-up is versleept naar een nieuwe plek (schermpixels).</summary>
+    public event EventHandler<System.Drawing.Point>? PositionChanged;
+
+    /// <summary>
+    /// Zet de pop-up op zijn plek, in echte schermpixels (dus goed bij elke schaal en
+    /// schermindeling): de zelf gekozen plek als die nog op een scherm ligt, anders rechtsonder in
+    /// het werkgebied. Bij een klik (tray, sneltoets) het scherm waar de muis is, anders het hoofdscherm.
+    /// </summary>
+    private void PlaceOnScreen(bool nearCursor)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+            return;
+
+        if (CustomPosition is { } p && MonitorFromPoint(new POINT { X = p.X, Y = p.Y }, MonitorDefaultToNull) != IntPtr.Zero)
+        {
+            SetWindowPos(handle, IntPtr.Zero, p.X, p.Y, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+            return;
+        }
+
+        POINT anchor = default;
+        if (!nearCursor || !GetCursorPos(out anchor))
+            anchor = default; // (0,0) ligt altijd op het hoofdscherm
+        var monitor = MonitorFromPoint(anchor, MonitorDefaultToPrimary);
+        var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (!GetMonitorInfo(monitor, ref info))
+            return;
+
+        // Twee keer: verhuist het venster naar een scherm met een andere schaal, dan verandert zijn
+        // grootte in pixels en moet hij opnieuw tegen de hoek aan.
+        for (var i = 0; i < 2; i++)
+        {
+            GetWindowRect(handle, out var r);
+            SetWindowPos(handle, IntPtr.Zero, info.rcWork.Right - (r.Right - r.Left), info.rcWork.Bottom - (r.Bottom - r.Top),
+                0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+        }
+    }
+
+    /// <summary>Slepen aan de achtergrond verplaatst de pop-up; de nieuwe plek wordt onthouden.</summary>
+    private void OnBackgroundMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left || e.ButtonState != MouseButtonState.Pressed)
+            return;
+
+        var handle = new WindowInteropHelper(this).Handle;
+        if (!GetWindowRect(handle, out var before))
+            return;
+
+        _autoHideTimer.Stop();
+        DragMove(); // keert terug als de muis wordt losgelaten
+
+        // Alleen een echte verplaatsing onthouden, niet een gewone klik op de achtergrond.
+        if (!GetWindowRect(handle, out var after) || (after.Left == before.Left && after.Top == before.Top))
+            return;
+
+        var position = new System.Drawing.Point(after.Left, after.Top);
+        CustomPosition = position;
+        PositionChanged?.Invoke(this, position);
+    }
+
+    private const uint MonitorDefaultToNull = 0;
+    private const uint MonitorDefaultToPrimary = 1;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct POINT { public int X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO { public int cbSize; public RECT rcMonitor; public RECT rcWork; public uint dwFlags; }
+
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out POINT point);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromPoint(POINT point, uint flags);
+    [DllImport("user32.dll")] private static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr handle, out RECT rect);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr handle, IntPtr after, int x, int y, int cx, int cy, uint flags);
 
     public void HidePopup()
     {

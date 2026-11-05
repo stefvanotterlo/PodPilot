@@ -1,3 +1,4 @@
+using PodPilot.App.Services;
 namespace PodPilot.App.ViewModels;
 
 /// <summary>Bepaalt welk icoon de pop-up toont.</summary>
@@ -43,7 +44,7 @@ public sealed class ComponentViewModel : ObservableObject
     }
 
     /// <summary>Naam onder het icoon, met "in oor" erbij als de oordop in het oor zit.</summary>
-    public string DisplayLabel => _isInEar ? $"{_label} · in oor" : _label;
+    public string DisplayLabel => _isInEar ? L.T("{0} · in oor", _label) : _label;
 
     /// <summary>Batterij in procenten, of null als die onbekend is.</summary>
     public int? Percent => _percent;
@@ -78,7 +79,7 @@ public sealed class ComponentViewModel : ObservableObject
         _ => "High",
     };
 
-    public string ToolTipText => _isStale ? "Laatst bekende waarde" : _label;
+    public string ToolTipText => _isStale ? L.T("Laatst bekende waarde") : _label;
 
     /// <summary>Werkt alle waarden in één keer bij.</summary>
     public void Update(int? percent, bool isCharging, bool isInEar, bool isStale = false)
@@ -125,12 +126,12 @@ public sealed class ComponentViewModel : ObservableObject
         if (remaining is not TimeSpan r)
             return "";
         if (r.TotalMinutes < 10)
-            return "nog < 10 min";
+            return L.T("nog < 10 min");
 
         // AirPods melden in stappen van 10%; op 10 minuten afronden is al nauwkeurig genoeg.
         var minutes = (int)Math.Round(r.TotalMinutes / 10) * 10;
         if (minutes < 60)
-            return $"nog ~{minutes} min";
-        return minutes % 60 == 0 ? $"nog ~{minutes / 60} u" : $"nog ~{minutes / 60} u {minutes % 60} min";
+            return L.T("nog ~{0} min", minutes);
+        return minutes % 60 == 0 ? L.T("nog ~{0} u", minutes / 60) : L.T("nog ~{0} u {1} min", minutes / 60, minutes % 60);
     }
 }

@@ -12,10 +12,12 @@
     <AssemblyName>PodPilot</AssemblyName>
     <RootNamespace>PodPilot.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- App-icoon (eigen ontwerp): exe, Startmenu, Zoeken, taakbalk en vensters. -->
+    <ApplicationIcon>Assets\PodPilot.ico</ApplicationIcon>
     <!-- WFAC010 is een WinForms-advies; voor een WPF-app hoort de DPI-instelling juist in app.manifest. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <!-- Versie-info in de exe; de installer (installer/PodPilot.iss) leest de versie hieruit. -->
-    <Version>1.3.1</Version>
+    <Version>1.4.0</Version>
     <Product>PodPilot</Product>
     <Description>AirPods-batterij en verbinding</Description>
     <!-- Alleen bij een single-file publish: de exe gecomprimeerd opslaan (scheelt ruim de helft). -->

@@ -76,6 +76,9 @@ public static class ThemeManager
     }
 
     // Met een eigen achtergrondkleur bepaalt die kleur of het venster licht of donker is.
+    /// <summary>De kleuren van een thema, bijv. voor het tray-menu (dat geen eigen venster heeft).</summary>
+    public static ResourceDictionary CreateColorsFor(AppTheme theme) => CreateColors(IsLight(theme));
+
     private static bool IsLight(AppTheme theme) => CustomBackground is Color background
         ? IsBright(background)
         : theme switch

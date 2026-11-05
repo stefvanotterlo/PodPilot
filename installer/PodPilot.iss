@@ -34,6 +34,8 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 UninstallDisplayIcon={app}\{#AppExe}
+; Zelfde icoon als de app, ook voor de installer zelf.
+SetupIconFile=..\src\PodPilot.App\Assets\PodPilot.ico
 UninstallDisplayName={#AppName}
 ; Een draaiende PodPilot (zit in het systeemvak, heeft geen venster) netjes laten afsluiten.
 CloseApplications=force

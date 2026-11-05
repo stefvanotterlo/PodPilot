@@ -17,22 +17,40 @@ internal static class NotificationService
     /// <summary>Melding "batterij bijna leeg", bijv. "Links 20% · Rechts 10%".</summary>
     public static void ShowLowBattery(string deviceName, IReadOnlyList<LowBatteryItem> items)
     {
-        var detail = string.Join(" · ", items.Select(i => $"{i.Label} {i.Percent}%"));
+        var detail = string.Join(" · ", items.Select(i => $"{L.T(i.Label)} {i.Percent}%"));
 
         var content = new ToastContentBuilder()
-            .AddText($"{deviceName}: batterij bijna leeg")
-            .AddText($"{detail}. Leg ze in de case om op te laden.")
+            .AddText(L.T("{0}: batterij bijna leeg", deviceName))
+            .AddText(L.T("{0}. Leg ze in de case om op te laden.", detail))
             .GetToastContent();
 
         Show(content);
     }
 
-    private static void Show(ToastContent content)
+    /// <summary>Melding "nieuwe versie beschikbaar". Klik = <paramref name="onClick"/> (achtergrondthread).</summary>
+    public static void ShowUpdateAvailable(Version version, Action onClick)
+    {
+        var content = new ToastContentBuilder()
+            .AddText(L.T("PodPilot {0} is beschikbaar", version))
+            .AddText(L.T("Klik hier, of ga naar het tabblad Over, om bij te werken."))
+            .GetToastContent();
+
+        Show(content, onClick);
+    }
+
+    /// <param name="onClick">Wat een klik doet; standaard het <see cref="Clicked"/>-event (pop-up).</param>
+    private static void Show(ToastContent content, Action? onClick = null)
     {
         try
         {
             var toast = new ToastNotification(content.GetXml());
-            toast.Activated += (_, _) => Clicked?.Invoke(null, EventArgs.Empty);
+            toast.Activated += (_, _) =>
+            {
+                if (onClick is not null)
+                    onClick();
+                else
+                    Clicked?.Invoke(null, EventArgs.Empty);
+            };
             ToastNotificationManager.CreateToastNotifier(StartMenuShortcut.AppUserModelId).Show(toast);
         }
         catch (Exception)

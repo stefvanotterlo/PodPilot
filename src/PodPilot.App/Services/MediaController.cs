@@ -85,4 +85,35 @@ internal sealed class MediaController
 
     /// <summary>Vergeet gepauzeerde sessies, bijv. als de AirPods niet meer verbonden zijn.</summary>
     public void Forget() => _pausedSessions = [];
+
+    /// <summary>
+    /// Stuurt "afspelen" naar de mediasessie die Windows als huidige ziet (de speler die het laatst
+    /// actief was). Speelt er al iets, of is er geen speler open, dan gebeurt er niets.
+    /// </summary>
+    public async Task PlayCurrentAsync()
+    {
+        try
+        {
+            _manager ??= await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
+            if (_manager.GetSessions().Any(s =>
+                    s.GetPlaybackInfo().PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing))
+            {
+                DiagnosticLog.Write("media: afspelen overgeslagen, er speelt al iets");
+                return;
+            }
+
+            if (_manager.GetCurrentSession() is not { } session)
+            {
+                DiagnosticLog.Write("media: afspelen overgeslagen, geen speler open");
+                return;
+            }
+
+            var played = await session.TryPlayAsync();
+            DiagnosticLog.Write($"media: afspelen {session.SourceAppUserModelId} → {(played ? "gelukt" : "geweigerd")}");
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write($"media: afspelen mislukt: {ex.Message}");
+        }
+    }
 }

@@ -1,3 +1,4 @@
+using PodPilot.App.Services;
 using PodPilot.Core.Models;
 
 namespace PodPilot.App.ViewModels;
@@ -16,9 +17,9 @@ public sealed class StatusViewModel : ObservableObject
         Components = [Left, Right, Case];
     }
 
-    public ComponentViewModel Left { get; } = new(ComponentKind.LeftBud, "Links");
-    public ComponentViewModel Right { get; } = new(ComponentKind.RightBud, "Rechts");
-    public ComponentViewModel Case { get; } = new(ComponentKind.Case, "Case");
+    public ComponentViewModel Left { get; } = new(ComponentKind.LeftBud, L.T("Links"));
+    public ComponentViewModel Right { get; } = new(ComponentKind.RightBud, L.T("Rechts"));
+    public ComponentViewModel Case { get; } = new(ComponentKind.Case, L.T("Case"));
 
     /// <summary>De onderdelen in de volgorde waarin de pop-up ze toont.</summary>
     public IReadOnlyList<ComponentViewModel> Components { get; }
@@ -66,14 +67,14 @@ public sealed class StatusViewModel : ObservableObject
         get
         {
             if (!IsKnown)
-                return $"{DeviceName}: status onbekend";
+                return L.T("{0}: status onbekend", DeviceName);
 
             if (Case.IsVisible is false)
                 return $"{DeviceName}\n{Left.PercentText}";
 
-            return $"{DeviceName}\nL {Left.PercentText}{InEar(Left)} · R {Right.PercentText}{InEar(Right)} · Case {Case.PercentText}";
+            return $"{DeviceName}\n{L.T("L")} {Left.PercentText}{InEar(Left)} · {L.T("R")} {Right.PercentText}{InEar(Right)} · {L.T("Case")} {Case.PercentText}";
 
-            static string InEar(ComponentViewModel bud) => bud.IsInEar ? " (in oor)" : "";
+            static string InEar(ComponentViewModel bud) => bud.IsInEar ? L.T(" (in oor)") : "";
         }
     }
 
@@ -93,16 +94,16 @@ public sealed class StatusViewModel : ObservableObject
     public bool CanToggleConnection => !_isBusy;
 
     public string ConnectButtonText =>
-        !_isPaired ? "Koppelen…"
-        : _isBusy ? "Bezig…"
-        : _isConnected ? "Verbinding verbreken"
-        : "Verbinden";
+        !_isPaired ? L.T("Koppelen…")
+        : _isBusy ? L.T("Bezig…")
+        : _isConnected ? L.T("Verbinding verbreken")
+        : L.T("Verbinden");
 
     public string ConnectionText =>
         _connectionMessage
-        ?? (!_isPaired ? "Niet gekoppeld met deze pc"
-            : _isConnected ? "Verbonden met deze pc"
-            : "Niet verbonden");
+        ?? (!_isPaired ? L.T("Niet gekoppeld met deze pc")
+            : _isConnected ? L.T("Verbonden met deze pc")
+            : L.T("Niet verbonden"));
 
     /// <summary>Werkt de verbindingsstatus bij. Een eventuele foutmelding verdwijnt als de status echt verandert.</summary>
     public void SetConnection(bool isPaired, bool isConnected)
@@ -136,7 +137,7 @@ public sealed class StatusViewModel : ObservableObject
     public void Apply(AirPodsStatus status)
     {
         IsKnown = true;
-        ModelName = status.Model.Name;
+        ModelName = L.T(status.Model.Name);
         ConfigureForModel(status.Model);
 
         Left.Update(status.Left.BatteryPercent, status.Left.IsCharging, status.Left.IsInEar);
@@ -154,8 +155,8 @@ public sealed class StatusViewModel : ObservableObject
         _lastModelId = status.Model.Id;
 
         // De dekselstatus klopt alleen als er een oordop in de case zit; anders laten we hem weg.
-        var lid = status.Case.IsKnown && status.IsLidOpen ? "Case open · " : "";
-        StatusText = $"{lid}bijgewerkt {status.ReceivedAt:HH:mm:ss}";
+        var lid = status.Case.IsKnown && status.IsLidOpen ? L.T("Case open · ") : "";
+        StatusText = lid + L.T("bijgewerkt {0:HH:mm:ss}", status.ReceivedAt);
 
         OnPropertyChanged(nameof(SubtitleText));
         OnPropertyChanged(nameof(LowestPercent));
@@ -180,7 +181,7 @@ public sealed class StatusViewModel : ObservableObject
     private void ConfigureForModel(AirPodsModelInfo model)
     {
         Left.Kind = model.IsHeadphones ? ComponentKind.Headphones : ComponentKind.LeftBud;
-        Left.Label = model.IsHeadphones ? "Koptelefoon" : "Links";
+        Left.Label = model.IsHeadphones ? L.T("Koptelefoon") : L.T("Links");
         Right.IsVisible = !model.IsHeadphones;
         Case.IsVisible = model.HasCase;
     }
