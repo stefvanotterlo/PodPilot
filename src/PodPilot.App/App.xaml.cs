@@ -38,7 +38,9 @@ public partial class App : Application
     private BatteryHistory? _history;
     private int _inEarBeforePause;
     private string? _lastRawInEar;
-    private DateTimeOffset _lastAutoConnect = DateTimeOffset.MinValue;    private bool _autoConnectSuppressed;
+    private DateTimeOffset _lastAutoConnect = DateTimeOffset.MinValue;
+    // Na zelf verbreken even geen automatisch verbinden (anders verbindt hij meteen weer).
+    private DateTimeOffset _autoConnectBlockedUntil = DateTimeOffset.MinValue;
     private AppSettings _settings = new();
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -607,7 +609,7 @@ public partial class App : Application
 
         if (!_status.IsConnected)
         {
-            _autoConnectSuppressed = false;
+            _autoConnectBlockedUntil = DateTimeOffset.MinValue;
             // Bluetooth-instellingen alleen als de AirPods wel in beeld zijn; anders staat er in de
             // pop-up dat je de case moet openen.
             if (!await ConnectAsync(_device, containerId, _connection, automatic: false) && _status.IsKnown)
@@ -615,9 +617,10 @@ public partial class App : Application
             return;
         }
 
-        // Zelf verbroken: niet meteen weer automatisch verbinden, pas als de AirPods een keer
-        // uit beeld zijn geweest (case dicht).
-        _autoConnectSuppressed = true;
+        // Zelf verbroken: 10 seconden niet automatisch verbinden, zodat de verbinding niet meteen
+        // terugkomt. Daarna werkt "verbinden als je ze indoet" weer, ook zonder de case te sluiten.
+        _autoConnectBlockedUntil = DateTimeOffset.Now.AddSeconds(10);
+        DiagnosticLog.Write("verbreken (knop): zelf verbroken, 10 s geen automatisch verbinden");
         _status.SetBusy(true, L.T("Verbinding verbreken…"));
         var result = await BluetoothAudioConnector.DisconnectAsync(containerId, _device.Name);
         var succeeded = result == AudioConnectResult.Requested
@@ -638,13 +641,47 @@ public partial class App : Application
         _status.SetBusy(true, automatic ? L.T("Automatisch verbinden…") : L.T("Verbinden…"));
         DiagnosticLog.Write($"verbinden ({(automatic ? "automatisch" : "knop")}): start");
 
-        // Eerst een Bluetooth-verbinding forceren; sommige drivers (Intel Smart Sound) negeren
-        // het audioverzoek anders.
-        await connection.WakeAsync();
-        var result = await BluetoothAudioConnector.ConnectAsync(containerId, device.Name);
-        var succeeded = result == AudioConnectResult.Requested
+        // Steeds opnieuw proberen, tot 30 seconden lang. Net na het indoen (of openen van de case)
+        // zijn de AirPods nog bezig met opstarten (gemeten: ~15 s); een verzoek dat dan komt, wordt
+        // aangenomen maar genegeerd. Zodra ze klaar zijn, lukt een verzoek binnen ~2 s. Daarom kort
+        // wachten per poging en snel opnieuw: dan verbinden ze vrijwel meteen als ze klaar zijn.
+        var started = DateTime.UtcNow;
+        var deadline = started + TimeSpan.FromSeconds(30);
+        var result = AudioConnectResult.Failed;
+        var succeeded = false;
+        Task? wake = null;
+        for (var attempt = 1; !succeeded && DateTime.UtcNow < deadline; attempt++)
+        {
+            // Eerst een Bluetooth-verbinding forceren; sommige drivers (Intel Smart Sound) negeren
+            // het audioverzoek anders.
+            // Is er al een Bluetooth-verbinding, dan is dat niet nodig. De SDP-query kan tijdens het
+            // opstarten van de AirPods tot ~15 s blijven hangen: daarom hooguit 3 s erop wachten
+            // (de query loopt op de achtergrond door en zet de verbinding dan alsnog op).
+            var t0 = DateTime.UtcNow;
+            var woke = "al verbonden";
+            if (!connection.IsConnected)
+            {
+                // Een query die nog loopt niet nog eens starten.
+                if (wake is null || wake.IsCompleted)
+                    wake = connection.WakeAsync();
+                woke = await Task.WhenAny(wake, Task.Delay(TimeSpan.FromSeconds(3))) == wake
+                    ? $"wekken {(DateTime.UtcNow - t0).TotalSeconds:0.0} s"
+                    : "wekken > 3 s, niet gewacht";
+            }
+            var t1 = DateTime.UtcNow;
+            result = await BluetoothAudioConnector.ConnectAsync(containerId, device.Name);
+            var requestTime = (DateTime.UtcNow - t1).TotalSeconds;
+            succeeded = result == AudioConnectResult.Requested
                         && await BluetoothAudioConnector.WaitForAudioAsync(containerId, device.Name,
-                               active: true, TimeSpan.FromSeconds(10));
+                               active: true, TimeSpan.FromSeconds(2.5));
+            DiagnosticLog.Write($"verbinden: poging {attempt} {(succeeded ? "gelukt" : "mislukt")} " +
+                                $"na {(DateTime.UtcNow - started).TotalSeconds:0.0} s ({woke}, " +
+                                $"verzoek {result} {requestTime:0.0} s)");
+
+            // Geen verzoek mogelijk (geen audio-endpoint) of de AirPods slapen: opnieuw proberen heeft geen zin.
+            if (result == AudioConnectResult.NoAudioEndpoint || !_status.IsKnown)
+                break;
+        }
 
         // Geen advertenties = de AirPods slapen (dichte case) of zijn buiten bereik: dan helpen de
         // Bluetooth-instellingen niet, maar de case openen wel.
@@ -670,7 +707,7 @@ public partial class App : Application
         if (_status.IsConnected || !_status.CanToggleConnection)
             return;
 
-        if (_autoConnectSuppressed)
+        if (DateTimeOffset.Now < _autoConnectBlockedUntil)
         {
             DiagnosticLog.Write($"auto-verbinden ({reason}): overgeslagen, net zelf verbroken");
             return;
@@ -779,7 +816,8 @@ public partial class App : Application
         _history?.MarkGap(DateTimeOffset.Now);
         _lidDetector.Reset();
         _ears.Reset();
-        _lastRawInEar = null; // eerste signaal hierna weer in het log        _autoConnectSuppressed = false; // AirPods uit beeld (case dicht): automatisch verbinden mag weer
+        _lastRawInEar = null; // eerste signaal hierna weer in het log
+        _autoConnectBlockedUntil = DateTimeOffset.MinValue; // AirPods uit beeld (case dicht): automatisch verbinden mag weer
         UpdateTray();
     }
 
