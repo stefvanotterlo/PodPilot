@@ -641,47 +641,57 @@ public partial class App : Application
         _status.SetBusy(true, automatic ? L.T("Automatisch verbinden…") : L.T("Verbinden…"));
         DiagnosticLog.Write($"verbinden ({(automatic ? "automatisch" : "knop")}): start");
 
-        // Steeds opnieuw proberen, tot 30 seconden lang. Net na het indoen (of openen van de case)
-        // zijn de AirPods nog bezig met opstarten (gemeten: ~15 s); een verzoek dat dan komt, wordt
-        // aangenomen maar genegeerd. Zodra ze klaar zijn, lukt een verzoek binnen ~2 s. Daarom kort
-        // wachten per poging en snel opnieuw: dan verbinden ze vrijwel meteen als ze klaar zijn.
+        // Tot 30 seconden lang proberen. Net na het indoen (of openen van de case) zijn de AirPods
+        // nog bezig met opstarten; een verzoek dat dan komt, wordt aangenomen maar genegeerd.
+        // Werkwijze: eerst een Bluetooth-verbinding (ACL) via de wekstap; sommige drivers (Intel
+        // Smart Sound) negeren het audioverzoek zonder. Pas als die er is één verzoek sturen en dat
+        // 5 s de tijd geven: elke 2,5 s een nieuw verzoek brak een opbouwende verbinding af (gemeten).
         var started = DateTime.UtcNow;
         var deadline = started + TimeSpan.FromSeconds(30);
         var result = AudioConnectResult.Failed;
         var succeeded = false;
         Task? wake = null;
-        for (var attempt = 1; !succeeded && DateTime.UtcNow < deadline; attempt++)
+        var attempt = 0;
+
+        // Niet doen: het verzoek al vóór of tijdens de wekstap sturen. Getest (5-11-2026): dat
+        // verzoek werd genegeerd en ook de volgende pogingen mislukten, 22 s in plaats van 8 s.
+        while (!succeeded && DateTime.UtcNow < deadline)
         {
-            // Eerst een Bluetooth-verbinding forceren; sommige drivers (Intel Smart Sound) negeren
-            // het audioverzoek anders.
-            // Is er al een Bluetooth-verbinding, dan is dat niet nodig. De SDP-query kan tijdens het
-            // opstarten van de AirPods tot ~15 s blijven hangen: daarom hooguit 3 s erop wachten
-            // (de query loopt op de achtergrond door en zet de verbinding dan alsnog op).
-            var t0 = DateTime.UtcNow;
             var woke = "al verbonden";
             if (!connection.IsConnected)
             {
-                // Een query die nog loopt niet nog eens starten.
+                // De SDP-query kan tijdens het opstarten ~15 s hangen; een query die nog loopt niet
+                // opnieuw starten, en ondertussen kijken of de Bluetooth-verbinding er al is.
                 if (wake is null || wake.IsCompleted)
                     wake = connection.WakeAsync();
-                woke = await Task.WhenAny(wake, Task.Delay(TimeSpan.FromSeconds(3))) == wake
-                    ? $"wekken {(DateTime.UtcNow - t0).TotalSeconds:0.0} s"
-                    : "wekken > 3 s, niet gewacht";
+                var t0 = DateTime.UtcNow;
+                while (!wake.IsCompleted && !connection.IsConnected && DateTime.UtcNow < deadline)
+                    await Task.WhenAny(wake, Task.Delay(250));
+
+                if (!connection.IsConnected && !wake.IsCompleted)
+                    break; // deadline: AirPods niet bereikbaar
+                woke = connection.IsConnected
+                    ? $"Bluetooth na {(DateTime.UtcNow - t0).TotalSeconds:0.0} s"
+                    : "wekken klaar, geen Bluetooth";
             }
-            var t1 = DateTime.UtcNow;
+
+            attempt++;
             result = await BluetoothAudioConnector.ConnectAsync(containerId, device.Name);
-            var requestTime = (DateTime.UtcNow - t1).TotalSeconds;
             succeeded = result == AudioConnectResult.Requested
                         && await BluetoothAudioConnector.WaitForAudioAsync(containerId, device.Name,
-                               active: true, TimeSpan.FromSeconds(2.5));
+                               active: true, TimeSpan.FromSeconds(5));
             DiagnosticLog.Write($"verbinden: poging {attempt} {(succeeded ? "gelukt" : "mislukt")} " +
-                                $"na {(DateTime.UtcNow - started).TotalSeconds:0.0} s ({woke}, " +
-                                $"verzoek {result} {requestTime:0.0} s)");
+                                $"na {(DateTime.UtcNow - started).TotalSeconds:0.0} s ({woke}, verzoek {result})");
 
             // Geen verzoek mogelijk (geen audio-endpoint) of de AirPods slapen: opnieuw proberen heeft geen zin.
             if (result == AudioConnectResult.NoAudioEndpoint || !_status.IsKnown)
                 break;
         }
+
+        // Een laat aangekomen verzoek kan alsnog gelukt zijn.
+        if (!succeeded && attempt > 0)
+            succeeded = await BluetoothAudioConnector.WaitForAudioAsync(containerId, device.Name,
+                active: true, TimeSpan.Zero);
 
         // Geen advertenties = de AirPods slapen (dichte case) of zijn buiten bereik: dan helpen de
         // Bluetooth-instellingen niet, maar de case openen wel.

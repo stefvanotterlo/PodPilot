@@ -122,7 +122,7 @@ public static class BluetoothAudioConnector
         {
             if (await IsAudioActiveAsync(containerId, deviceName) == active)
                 return true;
-            await Task.Delay(500);
+            await Task.Delay(250);
         }
         while (DateTime.UtcNow < deadline);
 
