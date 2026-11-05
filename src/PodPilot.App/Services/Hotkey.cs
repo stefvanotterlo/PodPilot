@@ -2,6 +2,15 @@ using System.Windows.Input;
 
 namespace PodPilot.App.Services;
 
+/// <summary>De extra sneltoetsen (media en profiel), zodat er één zet-functie voor allemaal is.</summary>
+public enum HotkeyName
+{
+    PlayPause,
+    Next,
+    Previous,
+    Profile,
+}
+
 /// <summary>
 /// Een toetscombinatie, bijv. Ctrl+Alt+P. In settings.json staat hij als tekst ("Ctrl+Alt+P").
 /// </summary>
@@ -63,5 +72,13 @@ public readonly record struct Hotkey(ModifierKeys Modifiers, Key Key)
     public static bool IsModifierKey(Key key) => key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt
         or Key.RightAlt or Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or Key.System;
 
-    private static string KeyName(Key key) => key is >= Key.D0 and <= Key.D9 ? key.ToString()[1..] : key.ToString();
+    private static string KeyName(Key key) => key switch
+    {
+        >= Key.D0 and <= Key.D9 => key.ToString()[1..],
+        // Dubbele namen in de Key-enum: Next = PageDown, Prior = PageUp, Return = Enter.
+        Key.PageDown => "PageDown",
+        Key.PageUp => "PageUp",
+        Key.Enter => "Enter",
+        _ => key.ToString(),
+    };
 }

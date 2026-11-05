@@ -33,6 +33,8 @@ public partial class App : Application
     private StatusViewModel _status = null!;
     private readonly LidOpenDetector _lidDetector = new();
     private readonly LowBatteryMonitor _lowBattery = new();
+    private readonly CaseBatteryMonitor _caseBattery = new();
+    private readonly BudOutOfCaseMonitor _looseBuds = new();
     private readonly EarDetectionMonitor _ears = new();
     private readonly MediaController _media = new();
     private NowPlayingService? _nowPlaying;
@@ -145,6 +147,15 @@ public partial class App : Application
         _outputHotkey = new GlobalHotkey();
         _outputHotkey.Pressed += (_, _) => SwitchToNextOutput();
         ApplyOutputHotkey(_settings.SwitchOutputHotkeyEnabled ? Hotkey.Parse(_settings.SwitchOutputHotkey) : null);
+
+        // Media (voor de speler bij "Nu aan het afspelen") en profiel wisselen.
+        foreach (var name in Enum.GetValues<HotkeyName>())
+        {
+            var hotkey = new GlobalHotkey();
+            hotkey.Pressed += async (_, _) => await OnNamedHotkeyAsync(name);
+            _namedHotkeys[name] = hotkey;
+        }
+        ApplyNamedHotkeysFromSettings();
 
         _scanner = new AirPodsScanner();
         _scanner.StatusUpdated += (_, s) => OnUiThread(() => ApplyStatus(s));
@@ -289,7 +300,9 @@ public partial class App : Application
 
         var previousDevice = _settings.PreferredDeviceId;
         _mainWindow = new Views.MainWindow(_status, _settings, devices, ApplyPopupHotkey, ApplyConnectHotkey,
-            ApplyOutputHotkey);
+            ApplyOutputHotkey, ApplyNamedHotkey);
+        _mainWindow.ProfileRequested += (_, name) => SwitchProfile(name);
+        _mainWindow.ImportRequested += (_, path) => ImportSettings(path);
         ThemeManager.ApplyTo(_mainWindow, _settings.Theme);
         _mainWindow.ShowPage(page);
         _mainWindow.ConnectToggleRequested += async (_, _) => await ToggleConnectionAsync();
@@ -309,6 +322,9 @@ public partial class App : Application
         };
         _mainWindow.SettingsChanged += async (_, _) =>
         {
+            // Wijzigingen in de schakelaars horen bij het actieve profiel.
+            _settings.Profiles[_settings.ActiveProfile] = _settings.CaptureProfile();
+            _settings.Save();
             ApplySettings();
             if (_settings.PreferredDeviceId != previousDevice && _scanner is not null)
             {
@@ -392,6 +408,8 @@ public partial class App : Application
         ApplyPopupHotkey(null);
         ApplyConnectHotkey(null);
         ApplyOutputHotkey(null);
+        foreach (var name in Enum.GetValues<HotkeyName>())
+            ApplyNamedHotkey(name, null);
 
         _mainWindow?.Close();
         OpenMainWindow(MainPage.Settings);
@@ -469,6 +487,104 @@ public partial class App : Application
     /// <summary>Zet de sneltoets voor het wisselen van de geluidsuitgang (null = uit).</summary>
     private bool ApplyOutputHotkey(Hotkey? hotkey) => ApplyHotkey(_outputHotkey, hotkey, "geluidsuitgang");
 
+    private readonly Dictionary<HotkeyName, GlobalHotkey> _namedHotkeys = new();
+
+    /// <summary>Zet een media- of profielsneltoets (null = uit).</summary>
+    private bool ApplyNamedHotkey(HotkeyName name, Hotkey? hotkey) =>
+        ApplyHotkey(_namedHotkeys.GetValueOrDefault(name), hotkey, name.ToString());
+
+    private void ApplyNamedHotkeysFromSettings()
+    {
+        ApplyNamedHotkey(HotkeyName.PlayPause, _settings.PlayPauseHotkeyEnabled ? Hotkey.Parse(_settings.PlayPauseHotkey) : null);
+        ApplyNamedHotkey(HotkeyName.Next, _settings.NextHotkeyEnabled ? Hotkey.Parse(_settings.NextHotkey) : null);
+        ApplyNamedHotkey(HotkeyName.Previous, _settings.PreviousHotkeyEnabled ? Hotkey.Parse(_settings.PreviousHotkey) : null);
+        ApplyNamedHotkey(HotkeyName.Profile, _settings.ProfileHotkeyEnabled ? Hotkey.Parse(_settings.ProfileHotkey) : null);
+    }
+
+    private async Task OnNamedHotkeyAsync(HotkeyName name)
+    {
+        switch (name)
+        {
+            case HotkeyName.PlayPause when _nowPlaying is not null:
+                await _nowPlaying.PlayPauseAsync();
+                break;
+            case HotkeyName.Next when _nowPlaying is not null:
+                await _nowPlaying.NextAsync();
+                break;
+            case HotkeyName.Previous when _nowPlaying is not null:
+                await _nowPlaying.PreviousAsync();
+                break;
+            case HotkeyName.Profile:
+                SwitchProfile(NextProfile());
+                break;
+        }
+    }
+
+    private string NextProfile()
+    {
+        var index = Array.IndexOf(AppSettings.ProfileNames, _settings.ActiveProfile);
+        return AppSettings.ProfileNames[(index + 1) % AppSettings.ProfileNames.Length];
+    }
+
+    /// <summary>
+    /// Wisselt van profiel: de schakelaars van nu gaan naar het oude profiel, die van het nieuwe
+    /// profiel worden geladen (nog nooit gebruikt = de huidige overnemen). Korte melding onderin.
+    /// </summary>
+    private void SwitchProfile(string name)
+    {
+        if (name == _settings.ActiveProfile)
+            return;
+
+        _settings.Profiles[_settings.ActiveProfile] = _settings.CaptureProfile();
+        if (_settings.Profiles.TryGetValue(name, out var values))
+            _settings.ApplyProfile(values);
+        _settings.ActiveProfile = name;
+        _settings.Profiles[name] = _settings.CaptureProfile();
+        _settings.Save();
+        ApplySettings();
+        DiagnosticLog.Write($"profiel: {name}");
+        OutputToast.Show(L.T("Profiel: {0}", L.T(name)), ThemeManager.CreateColorsFor(_settings.PopupTheme));
+
+        // Het hoofdvenster toont de schakelaars van het oude profiel: opnieuw openen.
+        if (_mainWindow is not null)
+        {
+            _mainWindow.Close();
+            OpenMainWindow(MainPage.Settings);
+        }
+    }
+
+    /// <summary>Instellingen uit een geëxporteerd bestand overnemen.</summary>
+    private void ImportSettings(string path)
+    {
+        AppSettings imported;
+        try
+        {
+            imported = AppSettings.ImportFrom(path, _settings);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write($"instellingen: importeren mislukt: {ex.Message}");
+            _mainWindow?.ShowImportError(L.T("Dit is geen bestand met PodPilot-instellingen."));
+            return;
+        }
+
+        DiagnosticLog.Write($"instellingen: geïmporteerd uit {Path.GetFileName(path)}");
+        var languageChanged = imported.Language != _settings.Language;
+        _settings = imported;
+        _settings.Save();
+
+        ApplySettings();
+        ApplyPopupHotkey(_settings.PopupHotkeyEnabled ? Hotkey.Parse(_settings.PopupHotkey) : null);
+        ApplyConnectHotkey(_settings.ConnectHotkeyEnabled ? Hotkey.Parse(_settings.ConnectHotkey) : null);
+        ApplyOutputHotkey(_settings.SwitchOutputHotkeyEnabled ? Hotkey.Parse(_settings.SwitchOutputHotkey) : null);
+        ApplyNamedHotkeysFromSettings();
+
+        _mainWindow?.Close();
+        OpenMainWindow(MainPage.Settings);
+        if (languageChanged)
+            OutputToast.Show(L.T("Herstart PodPilot om de nieuwe taal te zien."), ThemeManager.CreateColorsFor(_settings.PopupTheme));
+    }
+
     private static bool ApplyHotkey(GlobalHotkey? target, Hotkey? hotkey, string name)
     {
         var ok = target?.Set(hotkey) ?? false;
@@ -484,6 +600,10 @@ public partial class App : Application
         UpdateTrayAppearance();
         ApplyPopupPosition();
         _lowBattery.Threshold = _settings.NotifyLowBattery ? _settings.LowBatteryThreshold : 0;
+        // De case gebruikt dezelfde drempel als de oordopjes.
+        _caseBattery.LowThreshold = _settings.NotifyCaseLow ? _settings.LowBatteryThreshold : 0;
+        _caseBattery.NotifyFull = _settings.NotifyCaseFull;
+        _looseBuds.Enabled = _settings.NotifyBudOutOfCase;
     }
 
     /// <summary>De bewaarde plek van de pop-up doorgeven (geen, of niet onthouden = rechtsonder).</summary>
@@ -832,6 +952,22 @@ public partial class App : Application
                 _popup.ShowAtCorner(activate: false);
         }
 
+        // Case bijna leeg of net vol (alleen te zien met een oordop erin en de deksel open).
+        var caseEvent = _caseBattery.Process(status);
+        if (caseEvent != CaseBatteryEvent.None && status.Case.BatteryPercent is int casePercent)
+        {
+            DiagnosticLog.Write($"melding: case {caseEvent} ({casePercent}%)");
+            NotificationService.ShowCaseBattery(_status.DeviceName, caseEvent, casePercent);
+        }
+
+        // Oordop ligt al een tijd los (niet in het oor, niet in de case).
+        var loose = _looseBuds.Process(status);
+        if (loose != LooseBuds.None)
+        {
+            DiagnosticLog.Write($"melding: oordop los ({loose})");
+            NotificationService.ShowBudsOutOfCase(_status.DeviceName, loose, (int)_looseBuds.Delay.TotalMinutes);
+        }
+
         HandleEarDetection(status);
     }
 
@@ -892,6 +1028,7 @@ public partial class App : Application
         _history?.MarkGap(DateTimeOffset.Now);
         _lidDetector.Reset();
         _ears.Reset();
+        _looseBuds.Reset();
         _lastRawInEar = null; // eerste signaal hierna weer in het log
         _preWoken = false; // volgende keer in beeld: weer vooraf wekken
         _autoConnectBlockedUntil = DateTimeOffset.MinValue; // AirPods uit beeld (case dicht): automatisch verbinden mag weer
@@ -924,6 +1061,10 @@ public partial class App : Application
             .. (_streaming.Active is { } stream
                 ? new TrayMenuEntry?[] { new("", L.T("Streamen van {0} stoppen", stream.Name), null, _streaming.Disconnect) }
                 : []),
+            // E77B = persoon: profiel wisselen (Werk ↔ Thuis).
+            new TrayMenuEntry("", L.T("Profiel: {0} → {1}", L.T(_settings.ActiveProfile), L.T(NextProfile())),
+                _settings.ProfileHotkeyEnabled ? Hotkey.Parse(_settings.ProfileHotkey)?.ToString() : null,
+                () => SwitchProfile(NextProfile())),
             null,
             new TrayMenuEntry("", L.T("Instellingen"), null, () => OpenMainWindow(MainPage.Settings)),
             new TrayMenuEntry("", L.T("Bluetooth-instellingen"), null, WindowsSettings.OpenBluetooth),
@@ -968,6 +1109,8 @@ public partial class App : Application
         _popupHotkey?.Dispose();
         _connectHotkey?.Dispose();
         _outputHotkey?.Dispose();
+        foreach (var hotkey in _namedHotkeys.Values)
+            hotkey.Dispose();
         _streaming.Dispose();
         _tray?.Dispose();
         if (_popup is not null)

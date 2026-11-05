@@ -42,7 +42,8 @@ public partial class MainWindow : Window
     /// <param name="applyConnectHotkey">Zet de sneltoets voor verbinden/verbreken; false = al in gebruik.</param>
     /// <param name="applyOutputHotkey">Zet de sneltoets voor het wisselen van de geluidsuitgang.</param>
     public MainWindow(StatusViewModel status, AppSettings settings, IReadOnlyList<PairedAppleDevice> devices,
-        Func<Hotkey?, bool> applyPopupHotkey, Func<Hotkey?, bool> applyConnectHotkey, Func<Hotkey?, bool> applyOutputHotkey)
+        Func<Hotkey?, bool> applyPopupHotkey, Func<Hotkey?, bool> applyConnectHotkey, Func<Hotkey?, bool> applyOutputHotkey,
+        Func<HotkeyName, Hotkey?, bool> applyNamedHotkey)
     {
         InitializeComponent();
         DataContext = status;
@@ -64,6 +65,30 @@ public partial class MainWindow : Window
             new Hotkey(ctrlAlt, System.Windows.Input.Key.O),
             () => _settings.SwitchOutputHotkeyEnabled, v => _settings.SwitchOutputHotkeyEnabled = v,
             () => _settings.SwitchOutputHotkey, v => _settings.SwitchOutputHotkey = v, applyOutputHotkey, Changed);
+        // Media en profiel: knop = de "regel" die alleen werkt als de schakelaar aan staat.
+        _extraHotkeyEditors =
+        [
+            new HotkeyEditor(PlayPauseHotkeyToggle, PlayPauseHotkeyButton, PlayPauseHotkeyButton, PlayPauseHotkeyHint,
+                new Hotkey(ctrlAlt, System.Windows.Input.Key.End),
+                () => _settings.PlayPauseHotkeyEnabled, v => _settings.PlayPauseHotkeyEnabled = v,
+                () => _settings.PlayPauseHotkey, v => _settings.PlayPauseHotkey = v,
+                h => applyNamedHotkey(HotkeyName.PlayPause, h), Changed),
+            new HotkeyEditor(NextHotkeyToggle, NextHotkeyButton, NextHotkeyButton, NextHotkeyHint,
+                new Hotkey(ctrlAlt, System.Windows.Input.Key.PageDown),
+                () => _settings.NextHotkeyEnabled, v => _settings.NextHotkeyEnabled = v,
+                () => _settings.NextHotkey, v => _settings.NextHotkey = v,
+                h => applyNamedHotkey(HotkeyName.Next, h), Changed),
+            new HotkeyEditor(PreviousHotkeyToggle, PreviousHotkeyButton, PreviousHotkeyButton, PreviousHotkeyHint,
+                new Hotkey(ctrlAlt, System.Windows.Input.Key.PageUp),
+                () => _settings.PreviousHotkeyEnabled, v => _settings.PreviousHotkeyEnabled = v,
+                () => _settings.PreviousHotkey, v => _settings.PreviousHotkey = v,
+                h => applyNamedHotkey(HotkeyName.Previous, h), Changed),
+            new HotkeyEditor(ProfileHotkeyToggle, ProfileHotkeyButton, ProfileHotkeyButton, ProfileHotkeyHint,
+                new Hotkey(ctrlAlt, System.Windows.Input.Key.W),
+                () => _settings.ProfileHotkeyEnabled, v => _settings.ProfileHotkeyEnabled = v,
+                () => _settings.ProfileHotkey, v => _settings.ProfileHotkey = v,
+                h => applyNamedHotkey(HotkeyName.Profile, h), Changed),
+        ];
         SwitchOutputToggle.IsChecked = settings.SwitchOutputOnConnect;
         CheckUpdatesToggle.IsChecked = settings.CheckForUpdates;
         OnToggle(CheckUpdatesToggle, () =>
@@ -78,7 +103,10 @@ public partial class MainWindow : Window
         PopupMainScreenToggle.IsChecked = settings.PopupOnMainScreen;
         RefreshPopupPosition();
         NotifyToggle.IsChecked = settings.NotifyLowBattery;
-        ThresholdSection.IsEnabled = settings.NotifyLowBattery;
+        ThresholdSection.IsEnabled = settings.NotifyLowBattery || settings.NotifyCaseLow;
+        NotifyCaseLowToggle.IsChecked = settings.NotifyCaseLow;
+        NotifyCaseFullToggle.IsChecked = settings.NotifyCaseFull;
+        NotifyLooseBudToggle.IsChecked = settings.NotifyBudOutOfCase;
         AutoResumeToggle.IsChecked = settings.AutoResumeOnEarInsertion;
         AutoPlayToggle.IsChecked = settings.AutoPlayOnConnect;
         AutoPauseOnDisconnectToggle.IsChecked = settings.AutoPauseOnDisconnect;
@@ -100,6 +128,9 @@ public partial class MainWindow : Window
             Changed();
         });
         OnToggle(NotifyToggle, OnNotifyChanged);
+        OnToggle(NotifyCaseLowToggle, OnNotifyChanged);
+        OnToggle(NotifyCaseFullToggle, OnNotifyChanged);
+        OnToggle(NotifyLooseBudToggle, OnNotifyChanged);
         // Deze drie staan zowel op het Overzicht (snelle instellingen) als op het tabblad AirPods.
         LinkToggles(QuickConnectLidToggle, AutoConnectLidToggle,
             () => _settings.AutoConnectOnLidOpen, v => _settings.AutoConnectOnLidOpen = v);
@@ -180,6 +211,16 @@ public partial class MainWindow : Window
             });
         }
 
+        // Profielen: wisselen laadt andere schakelaars; de app opent dit venster daarna opnieuw.
+        foreach (var profile in AppSettings.ProfileNames)
+        {
+            AddOption(ProfilePanel, "Profile", L.T(profile), _settings.ActiveProfile == profile, () =>
+            {
+                if (_settings.ActiveProfile != profile)
+                    ProfileRequested?.Invoke(this, profile);
+            });
+        }
+
         var hasPreferred = devices.Any(d => d.DeviceId == settings.PreferredDeviceId);
         AddDeviceOption(L.T("Automatisch"), L.T("Het eerste gepairde AirPods-apparaat"), !hasPreferred, null);
         foreach (var device in devices)
@@ -205,6 +246,46 @@ public partial class MainWindow : Window
 
     /// <summary>Er is iets gewijzigd (en opgeslagen). De app past het meteen toe.</summary>
     public event EventHandler? SettingsChanged;
+
+    /// <summary>Ander profiel gekozen (Nederlandse naam).</summary>
+    public event EventHandler<string>? ProfileRequested;
+
+    /// <summary>Een bestand is gekozen om te importeren (pad). De app leest en past het toe.</summary>
+    public event EventHandler<string>? ImportRequested;
+
+    private void OnExportClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            FileName = "PodPilot-instellingen.json",
+            Filter = L.T("PodPilot-instellingen") + " (*.json)|*.json",
+            DefaultExt = ".json",
+        };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        try
+        {
+            _settings.ExportTo(dialog.FileName);
+            ExportHint.Text = L.T("Opgeslagen in {0}", dialog.FileName);
+        }
+        catch (Exception ex)
+        {
+            ExportHint.Text = L.T("Opslaan lukt niet: {0}", ex.Message);
+        }
+    }
+
+    private void OnImportClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = L.T("PodPilot-instellingen") + " (*.json)|*.json",
+        };
+        if (dialog.ShowDialog(this) == true)
+            ImportRequested?.Invoke(this, dialog.FileName);
+    }
+
+    /// <summary>Importeren mislukt: uitleg onder de knoppen.</summary>
+    public void ShowImportError(string message) => ExportHint.Text = message;
 
     private void Changed()
     {
@@ -630,7 +711,11 @@ public partial class MainWindow : Window
     private void OnNotifyChanged()
     {
         _settings.NotifyLowBattery = NotifyToggle.IsChecked == true;
-        ThresholdSection.IsEnabled = _settings.NotifyLowBattery;
+        _settings.NotifyCaseLow = NotifyCaseLowToggle.IsChecked == true;
+        _settings.NotifyCaseFull = NotifyCaseFullToggle.IsChecked == true;
+        _settings.NotifyBudOutOfCase = NotifyLooseBudToggle.IsChecked == true;
+        // De drempel geldt ook voor de case.
+        ThresholdSection.IsEnabled = _settings.NotifyLowBattery || _settings.NotifyCaseLow;
         Changed();
     }
 
@@ -848,6 +933,7 @@ public partial class MainWindow : Window
     private HotkeyEditor? _popupHotkeyEditor;
     private HotkeyEditor? _connectHotkeyEditor;
     private HotkeyEditor? _outputHotkeyEditor;
+    private readonly HotkeyEditor[] _extraHotkeyEditors;
 
     protected override void OnClosed(EventArgs e)
     {
@@ -855,6 +941,8 @@ public partial class MainWindow : Window
         _popupHotkeyEditor?.Cancel();
         _connectHotkeyEditor?.Cancel();
         _outputHotkeyEditor?.Cancel();
+        foreach (var editor in _extraHotkeyEditors)
+            editor.Cancel();
         _deviceRefresh.Stop();
         base.OnClosed(e);
     }

@@ -117,6 +117,64 @@ public sealed class AppSettings
     /// </summary>
     public bool PopupOnMainScreen { get; set; } = true;
 
+    // --- Profielen ---------------------------------------------------------------------------
+
+    /// <summary>De twee vaste profielen (Nederlandse naam = sleutel; de UI vertaalt).</summary>
+    public static readonly string[] ProfileNames = ["Werk", "Thuis"];
+
+    /// <summary>Het profiel dat nu geldt. Wijzigingen in de schakelaars gaan naar dit profiel.</summary>
+    public string ActiveProfile { get; set; } = "Werk";
+
+    /// <summary>Bewaarde schakelaars per profiel; ontbreekt er een, dan neemt hij de huidige over.</summary>
+    public Dictionary<string, ProfileValues> Profiles { get; set; } = new();
+
+    /// <summary>De huidige schakelaars als profiel.</summary>
+    public ProfileValues CaptureProfile() => new()
+    {
+        AutoConnectOnLidOpen = AutoConnectOnLidOpen,
+        AutoConnectOnEarInsertion = AutoConnectOnEarInsertion,
+        AutoPauseOnEarRemoval = AutoPauseOnEarRemoval,
+        AutoResumeOnEarInsertion = AutoResumeOnEarInsertion,
+        AutoPlayOnConnect = AutoPlayOnConnect,
+        AutoPauseOnDisconnect = AutoPauseOnDisconnect,
+        SwitchOutputOnConnect = SwitchOutputOnConnect,
+        AutoPopupOnLidOpen = AutoPopupOnLidOpen,
+        NotifyLowBattery = NotifyLowBattery,
+    };
+
+    /// <summary>Zet de schakelaars van een profiel terug.</summary>
+    public void ApplyProfile(ProfileValues p)
+    {
+        AutoConnectOnLidOpen = p.AutoConnectOnLidOpen;
+        AutoConnectOnEarInsertion = p.AutoConnectOnEarInsertion;
+        AutoPauseOnEarRemoval = p.AutoPauseOnEarRemoval;
+        AutoResumeOnEarInsertion = p.AutoResumeOnEarInsertion;
+        AutoPlayOnConnect = p.AutoPlayOnConnect;
+        AutoPauseOnDisconnect = p.AutoPauseOnDisconnect;
+        SwitchOutputOnConnect = p.SwitchOutputOnConnect;
+        AutoPopupOnLidOpen = p.AutoPopupOnLidOpen;
+        NotifyLowBattery = p.NotifyLowBattery;
+    }
+
+    // Mediasneltoetsen en profiel wisselen (standaard uit, om botsingen met andere apps te voorkomen).
+    public bool PlayPauseHotkeyEnabled { get; set; }
+    public string? PlayPauseHotkey { get; set; }
+    public bool NextHotkeyEnabled { get; set; }
+    public string? NextHotkey { get; set; }
+    public bool PreviousHotkeyEnabled { get; set; }
+    public string? PreviousHotkey { get; set; }
+    public bool ProfileHotkeyEnabled { get; set; }
+    public string? ProfileHotkey { get; set; }
+
+    /// <summary>Melding als de case op of onder de drempel van de oordopjes komt.</summary>
+    public bool NotifyCaseLow { get; set; } = true;
+
+    /// <summary>Melding als de case tijdens het opladen op 100% komt.</summary>
+    public bool NotifyCaseFull { get; set; } = true;
+
+    /// <summary>Melding als een oordop 10 minuten buiten oor en case ligt.</summary>
+    public bool NotifyBudOutOfCase { get; set; } = true;
+
     /// <summary>Laatst bekende case-batterij (zonder oordop in de case is die niet te zien).</summary>
     public int? LastCasePercent { get; set; }
 
@@ -167,4 +225,47 @@ public sealed class AppSettings
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         File.WriteAllText(FilePath, JsonSerializer.Serialize(this, JsonOptions));
     }
+
+    /// <summary>Alle instellingen als bestand opslaan (Instellingen › Exporteren).</summary>
+    public void ExportTo(string path) => File.WriteAllText(path, JsonSerializer.Serialize(this, JsonOptions));
+
+    /// <summary>
+    /// Leest een geëxporteerd bestand. Gooit een fout als het geen PodPilot-instellingen zijn. De
+    /// gekozen AirPods (apparaat-ID) en de laatst bekende case horen bij déze pc en blijven staan.
+    /// </summary>
+    public static AppSettings ImportFrom(string path, AppSettings current)
+    {
+        var json = File.ReadAllText(path);
+        using (var doc = JsonDocument.Parse(json))
+        {
+            // Een willekeurig JSON-bestand zou anders "lukken" met alleen standaardwaarden.
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty(nameof(NotifyLowBattery), out _))
+                throw new InvalidDataException("Geen PodPilot-instellingen");
+        }
+
+        var imported = JsonSerializer.Deserialize<AppSettings>(json, JsonOptions)
+                       ?? throw new InvalidDataException("Leeg bestand");
+        imported.PreferredDeviceId = current.PreferredDeviceId;
+        imported.StreamSourceId = current.StreamSourceId;
+        imported.LastCasePercent = current.LastCasePercent;
+        imported.LastCaseSeenAt = current.LastCaseSeenAt;
+        imported.LastCaseModelId = current.LastCaseModelId;
+        imported.UpdateNotifiedVersion = current.UpdateNotifiedVersion;
+        return imported;
+    }
+}
+
+/// <summary>De schakelaars die per profiel (Werk/Thuis) kunnen verschillen.</summary>
+public sealed class ProfileValues
+{
+    public bool AutoConnectOnLidOpen { get; set; }
+    public bool AutoConnectOnEarInsertion { get; set; }
+    public bool AutoPauseOnEarRemoval { get; set; }
+    public bool AutoResumeOnEarInsertion { get; set; }
+    public bool AutoPlayOnConnect { get; set; }
+    public bool AutoPauseOnDisconnect { get; set; }
+    public bool SwitchOutputOnConnect { get; set; }
+    public bool AutoPopupOnLidOpen { get; set; }
+    public bool NotifyLowBattery { get; set; }
 }

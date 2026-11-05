@@ -86,6 +86,7 @@ internal sealed class StreamingService : IDisposable
     /// <summary>De telefoon verbreekt zelf (buiten bereik, Bluetooth uit): opruimen.</summary>
     private void OnStateChanged(AudioPlaybackConnection sender, object args)
     {
+        DiagnosticLog.Write($"streamen: status {sender.State}");
         if (sender.State == AudioPlaybackConnectionState.Closed && sender == _connection)
             Disconnect();
     }

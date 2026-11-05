@@ -76,6 +76,61 @@ internal static class Translations
         // --- Overzicht ---
         ["Snelle instellingen"] = "Quick settings",
         ["Nu aan het afspelen"] = "Now playing",
+        // Case- en oordopmeldingen
+        ["{0}: case bijna leeg"] = "{0}: case almost empty",
+        ["De case staat op {0}%. Leg hem aan de lader."] = "The case is at {0}%. Put it on the charger.",
+        ["{0}: case volledig opgeladen"] = "{0}: case fully charged",
+        ["De case staat op 100%. Je kunt hem van de lader halen."] = "The case is at 100%. You can take it off the charger.",
+        ["De linker oordop ligt al {0} minuten niet in je oor en niet in de case."] =
+            "The left earbud has been out of your ear and out of the case for {0} minutes.",
+        ["De rechter oordop ligt al {0} minuten niet in je oor en niet in de case."] =
+            "The right earbud has been out of your ear and out of the case for {0} minutes.",
+        ["Je oordopjes liggen al {0} minuten niet in je oor en niet in de case."] =
+            "Your earbuds have been out of your ears and out of the case for {0} minutes.",
+        ["{0}: leg je oordopjes terug"] = "{0}: put your earbuds back",
+        ["Zo laden ze niet op. Klikt de oordop wel goed vast in de case?"] =
+            "They won't charge like this. Does the earbud click into the case properly?",
+        ["Melding als de case bijna leeg is"] = "Notify when the case is almost empty",
+        ["Zelfde drempel als hierboven. De case is alleen te zien met een oordop erin en de deksel open."] =
+            "Same threshold as above. The case is only visible with an earbud inside and the lid open.",
+        ["Melding als de case vol is"] = "Notify when the case is full",
+        ["Als de case tijdens het opladen op 100% komt."] = "When the case reaches 100% while charging.",
+        ["Melding als een oordop los ligt"] = "Notify when an earbud is left out",
+        ["Als een oordop 10 minuten niet in je oor en niet in de case zit (dan laadt hij niet op)."] =
+            "When an earbud has been out of your ear and out of the case for 10 minutes (it won't charge).",
+        // Mediasneltoetsen en profielen
+        ["Afspelen/pauzeren"] = "Play/pause",
+        ["Voor de speler die bij Nu aan het afspelen staat."] = "For the player shown under Now playing.",
+        ["Volgend nummer."] = "Next track.",
+        ["Vorig nummer."] = "Previous track.",
+        ["Toetscombinatie voor afspelen/pauzeren"] = "Key combination for play/pause",
+        ["Sneltoets voor afspelen/pauzeren"] = "Shortcut for play/pause",
+        ["Toetscombinatie voor volgende"] = "Key combination for next",
+        ["Sneltoets voor volgende"] = "Shortcut for next",
+        ["Toetscombinatie voor vorige"] = "Key combination for previous",
+        ["Sneltoets voor vorige"] = "Shortcut for previous",
+        ["Profielen"] = "Profiles",
+        ["Profiel wisselen"] = "Switch profile",
+        ["Wisselt tussen Werk en Thuis (zie Instellingen › Profielen)."] = "Switches between Work and Home (see Settings › Profiles).",
+        ["Toetscombinatie voor profiel wisselen"] = "Key combination for switching profile",
+        ["Sneltoets voor profiel wisselen"] = "Shortcut for switching profile",
+        ["Actief profiel"] = "Active profile",
+        ["Wat je aanzet bij automatisch verbinden, pauzeren, afspelen, de pop-up en de batterijmelding, onthoudt PodPilot per profiel. Wisselen kan ook via het menu bij het systeemvak of een sneltoets."] =
+            "PodPilot remembers your choices for automatic connecting, pausing, playing, the pop-up and the battery notification per profile. You can also switch from the tray menu or with a shortcut.",
+        ["Werk"] = "Work",
+        ["Thuis"] = "Home",
+        ["Profiel: {0}"] = "Profile: {0}",
+        ["Profiel: {0} → {1}"] = "Profile: {0} → {1}",
+        // Exporteren en importeren
+        ["Instellingen exporteren en importeren"] = "Export and import settings",
+        ["Bewaar al je instellingen in een bestand, en zet ze terug op deze of een andere pc."] =
+            "Save all your settings to a file, and restore them on this or another PC.",
+        ["Exporteren"] = "Export",
+        ["Importeren"] = "Import",
+        ["PodPilot-instellingen"] = "PodPilot settings",
+        ["Opgeslagen in {0}"] = "Saved to {0}",
+        ["Opslaan lukt niet: {0}"] = "Could not save: {0}",
+        ["Dit is geen bestand met PodPilot-instellingen."] = "This is not a PodPilot settings file.",
         ["om {0:HH:mm}"] = "at {0:HH:mm}",
         ["gisteren {0:HH:mm}"] = "yesterday {0:HH:mm}",
         ["{0:d MMM HH:mm}"] = "{0:d MMM HH:mm}",
@@ -204,7 +259,7 @@ internal static class Translations
             "Work anywhere in Windows, even when PodPilot isn't in front. Click a combination and press a new one; Esc = cancel.",
         ["Pop-up"] = "Pop-up",
         ["Pop-up tonen of verbergen"] = "Show or hide the pop-up",
-        ["Opent de pop-up op het scherm waar je muis staat, of sluit hem."] = "Opens the pop-up on the screen where your mouse is, or closes it.",
+        ["Opent of sluit de pop-up."] = "Opens or closes the pop-up.",
         ["Sneltoets voor de pop-up"] = "Hotkey for the pop-up",
         ["Toetscombinatie"] = "Key combination",
         ["Klik op de knop en druk een nieuwe combinatie."] = "Click the button and press a new combination.",

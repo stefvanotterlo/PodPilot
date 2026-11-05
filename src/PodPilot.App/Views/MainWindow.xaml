@@ -522,6 +522,17 @@
             <StackPanel Margin="36,30,36,24" MaxWidth="760" HorizontalAlignment="Left">
                 <TextBlock Text="{l:T 'Instellingen'}" Style="{StaticResource PageTitle}" />
 
+                <!-- Profielen: elk profiel heeft eigen schakelaars voor verbinden, pauzeren en meldingen. -->
+                <TextBlock Text="{l:T 'Profielen'}" Style="{StaticResource SectionTitle}" />
+                <Border Style="{StaticResource Card}">
+                    <StackPanel Margin="0,12">
+                        <TextBlock Text="{l:T 'Actief profiel'}" Style="{StaticResource RowTitle}" />
+                        <TextBlock Style="{StaticResource RowHint}" Margin="0,2,0,8" TextWrapping="Wrap"
+                                   Text="{l:T 'Wat je aanzet bij automatisch verbinden, pauzeren, afspelen, de pop-up en de batterijmelding, onthoudt PodPilot per profiel. Wisselen kan ook via het menu bij het systeemvak of een sneltoets.'}" />
+                        <WrapPanel x:Name="ProfilePanel" />
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="{l:T 'Algemeen'}" Style="{StaticResource SectionTitle}" />
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
@@ -688,6 +699,45 @@
                             <TextBlock Text="{l:T 'Drempel'}" Style="{StaticResource RowTitle}" Margin="0,0,0,8" />
                             <WrapPanel x:Name="ThresholdPanel" />
                         </StackPanel>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" />
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Melding als de case bijna leeg is'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock Text="{l:T 'Zelfde drempel als hierboven. De case is alleen te zien met een oordop erin en de deksel open.'}" Style="{StaticResource RowHint}" />
+                            </StackPanel>
+                            <CheckBox x:Name="NotifyCaseLowToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Melding als de case bijna leeg is'}" />
+                        </Grid>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" />
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Melding als de case vol is'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock Text="{l:T 'Als de case tijdens het opladen op 100% komt.'}" Style="{StaticResource RowHint}" />
+                            </StackPanel>
+                            <CheckBox x:Name="NotifyCaseFullToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Melding als de case vol is'}" />
+                        </Grid>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" />
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Melding als een oordop los ligt'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock Text="{l:T 'Als een oordop 10 minuten niet in je oor en niet in de case zit (dan laadt hij niet op).'}" Style="{StaticResource RowHint}" />
+                            </StackPanel>
+                            <CheckBox x:Name="NotifyLooseBudToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Melding als een oordop los ligt'}" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -750,6 +800,24 @@
 
                 <TextBlock Text="{l:T 'Overig'}" Style="{StaticResource SectionTitle}" />
                 <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                    <Grid Margin="0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="{l:T 'Instellingen exporteren en importeren'}" Style="{StaticResource RowTitle}" />
+                            <TextBlock x:Name="ExportHint" Style="{StaticResource RowHint}" TextWrapping="Wrap"
+                                       Text="{l:T 'Bewaar al je instellingen in een bestand, en zet ze terug op deze of een andere pc.'}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource PillButton}" Content="{l:T 'Exporteren'}" Click="OnExportClick" />
+                            <Button Style="{StaticResource PillButton}" Content="{l:T 'Importeren'}" Click="OnImportClick"
+                                    Margin="8,0,0,0" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Height="1" Background="{DynamicResource DividerBrush}" />
                     <Grid Margin="0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -763,6 +831,7 @@
                         <Button x:Name="ResetButton" Grid.Column="1" Style="{StaticResource PillButton}"
                                 Content="{l:T 'Terugzetten'}" VerticalAlignment="Center" Click="OnResetClick" />
                     </Grid>
+                    </StackPanel>
                 </Border>
             </StackPanel>
         </ScrollViewer>
@@ -784,7 +853,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Margin="0,0,16,0">
                                 <TextBlock Text="{l:T 'Pop-up tonen of verbergen'}" Style="{StaticResource RowTitle}" />
-                                <TextBlock Text="{l:T 'Opent de pop-up op het scherm waar je muis staat, of sluit hem.'}" Style="{StaticResource RowHint}" />
+                                <TextBlock Text="{l:T 'Opent of sluit de pop-up.'}" Style="{StaticResource RowHint}" />
                             </StackPanel>
                             <CheckBox x:Name="HotkeyToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
                                       AutomationProperties.Name="{l:T 'Sneltoets voor de pop-up'}" />
@@ -868,6 +937,87 @@
                                     VerticalAlignment="Center" AutomationProperties.Name="{l:T 'Toetscombinatie voor geluidsuitgang wisselen'}" />
                         </Grid>
                     </StackPanel>
+                </Border>
+
+                <!-- Media en profielen: één regel per sneltoets (tekst, combinatie, schakelaar). -->
+                <TextBlock Text="{l:T 'Media'}" Style="{StaticResource SectionTitle}" />
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Afspelen/pauzeren'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock x:Name="PlayPauseHotkeyHint" Style="{StaticResource RowHint}"
+                                           Text="{l:T 'Voor de speler die bij Nu aan het afspelen staat.'}" />
+                            </StackPanel>
+                            <Button x:Name="PlayPauseHotkeyButton" Grid.Column="1" Style="{StaticResource PillButton}" MinWidth="120"
+                                    VerticalAlignment="Center" Margin="0,0,14,0"
+                                    AutomationProperties.Name="{l:T 'Toetscombinatie voor afspelen/pauzeren'}" />
+                            <CheckBox x:Name="PlayPauseHotkeyToggle" Grid.Column="2" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Sneltoets voor afspelen/pauzeren'}" />
+                        </Grid>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" />
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Volgende'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock x:Name="NextHotkeyHint" Style="{StaticResource RowHint}"
+                                           Text="{l:T 'Volgend nummer.'}" />
+                            </StackPanel>
+                            <Button x:Name="NextHotkeyButton" Grid.Column="1" Style="{StaticResource PillButton}" MinWidth="120"
+                                    VerticalAlignment="Center" Margin="0,0,14,0"
+                                    AutomationProperties.Name="{l:T 'Toetscombinatie voor volgende'}" />
+                            <CheckBox x:Name="NextHotkeyToggle" Grid.Column="2" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Sneltoets voor volgende'}" />
+                        </Grid>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" />
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Vorige'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock x:Name="PreviousHotkeyHint" Style="{StaticResource RowHint}"
+                                           Text="{l:T 'Vorig nummer.'}" />
+                            </StackPanel>
+                            <Button x:Name="PreviousHotkeyButton" Grid.Column="1" Style="{StaticResource PillButton}" MinWidth="120"
+                                    VerticalAlignment="Center" Margin="0,0,14,0"
+                                    AutomationProperties.Name="{l:T 'Toetscombinatie voor vorige'}" />
+                            <CheckBox x:Name="PreviousHotkeyToggle" Grid.Column="2" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Sneltoets voor vorige'}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="{l:T 'Profielen'}" Style="{StaticResource SectionTitle}" />
+                <Border Style="{StaticResource Card}">
+                    <Grid Margin="0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Margin="0,0,16,0">
+                            <TextBlock Text="{l:T 'Profiel wisselen'}" Style="{StaticResource RowTitle}" />
+                            <TextBlock x:Name="ProfileHotkeyHint" Style="{StaticResource RowHint}"
+                                       Text="{l:T 'Wisselt tussen Werk en Thuis (zie Instellingen › Profielen).'}" />
+                        </StackPanel>
+                        <Button x:Name="ProfileHotkeyButton" Grid.Column="1" Style="{StaticResource PillButton}" MinWidth="120"
+                                VerticalAlignment="Center" Margin="0,0,14,0"
+                                AutomationProperties.Name="{l:T 'Toetscombinatie voor profiel wisselen'}" />
+                        <CheckBox x:Name="ProfileHotkeyToggle" Grid.Column="2" Style="{StaticResource ToggleSwitch}"
+                                  AutomationProperties.Name="{l:T 'Sneltoets voor profiel wisselen'}" />
+                    </Grid>
                 </Border>
             </StackPanel>
         </ScrollViewer>

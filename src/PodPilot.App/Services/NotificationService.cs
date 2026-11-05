@@ -27,6 +27,39 @@ internal static class NotificationService
         Show(content);
     }
 
+    /// <summary>Melding over de case: bijna leeg of volledig opgeladen.</summary>
+    public static void ShowCaseBattery(string deviceName, CaseBatteryEvent kind, int percent)
+    {
+        var content = kind == CaseBatteryEvent.Low
+            ? new ToastContentBuilder()
+                .AddText(L.T("{0}: case bijna leeg", deviceName))
+                .AddText(L.T("De case staat op {0}%. Leg hem aan de lader.", percent))
+                .GetToastContent()
+            : new ToastContentBuilder()
+                .AddText(L.T("{0}: case volledig opgeladen", deviceName))
+                .AddText(L.T("De case staat op 100%. Je kunt hem van de lader halen."))
+                .GetToastContent();
+
+        Show(content);
+    }
+
+    /// <summary>Melding "oordop ligt niet in de case".</summary>
+    public static void ShowBudsOutOfCase(string deviceName, LooseBuds buds, int minutes)
+    {
+        var which = buds switch
+        {
+            LooseBuds.Left => L.T("De linker oordop ligt al {0} minuten niet in je oor en niet in de case.", minutes),
+            LooseBuds.Right => L.T("De rechter oordop ligt al {0} minuten niet in je oor en niet in de case.", minutes),
+            _ => L.T("Je oordopjes liggen al {0} minuten niet in je oor en niet in de case.", minutes),
+        };
+        var content = new ToastContentBuilder()
+            .AddText(L.T("{0}: leg je oordopjes terug", deviceName))
+            .AddText(which + " " + L.T("Zo laden ze niet op. Klikt de oordop wel goed vast in de case?"))
+            .GetToastContent();
+
+        Show(content);
+    }
+
     /// <summary>Melding "nieuwe versie beschikbaar". Klik = <paramref name="onClick"/> (achtergrondthread).</summary>
     public static void ShowUpdateAvailable(Version version, Action onClick)
     {

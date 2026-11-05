@@ -37,6 +37,11 @@ internal sealed class NowPlayingService : IDisposable
             () => RunAsync("volgende", s => s.TrySkipNextAsync().AsTask()));
     }
 
+    // Voor de mediasneltoetsen: hetzelfde als de knoppen in de pop-up.
+    public Task PlayPauseAsync() => RunAsync("afspelen/pauzeren (sneltoets)", s => s.TryTogglePlayPauseAsync().AsTask());
+    public Task NextAsync() => RunAsync("volgende (sneltoets)", s => s.TrySkipNextAsync().AsTask());
+    public Task PreviousAsync() => RunAsync("vorige (sneltoets)", s => s.TrySkipPreviousAsync().AsTask());
+
     /// <summary>Stuurt een knop door naar de getoonde sessie en werkt daarna meteen bij.</summary>
     private async Task RunAsync(string what, Func<GlobalSystemMediaTransportControlsSession, Task<bool>> action)
     {
