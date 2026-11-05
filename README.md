@@ -18,6 +18,7 @@ Je AirPods moeten al met de pc gekoppeld zijn via de Bluetooth-instellingen van 
 - Batterij van links, rechts en de case, ook als je de case opent, en als getal in het systeemvak
 - Verbinden en verbreken met één klik, met een sneltoets of automatisch
 - Muziek pauzeren als je een oordop uitdoet, en het geluid automatisch naar je AirPods zetten
+- Zien wat er speelt, met knoppen voor vorige, afspelen/pauzeren en volgende
 - Melding als de batterij bijna leeg is
 - Al je Bluetooth-koptelefoons op één plek, en je pc als speaker voor je telefoon
 - Eigen kleuren, licht of donker, Nederlands of Engels
