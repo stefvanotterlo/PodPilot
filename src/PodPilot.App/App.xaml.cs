@@ -35,12 +35,16 @@ public partial class App : Application
     private readonly LowBatteryMonitor _lowBattery = new();
     private readonly EarDetectionMonitor _ears = new();
     private readonly MediaController _media = new();
+    private NowPlayingService? _nowPlaying;
     private BatteryHistory? _history;
     private int _inEarBeforePause;
     private string? _lastRawInEar;
-    private DateTimeOffset _lastAutoConnect = DateTimeOffset.MinValue;
     // Na zelf verbreken even geen automatisch verbinden (anders verbindt hij meteen weer).
     private DateTimeOffset _autoConnectBlockedUntil = DateTimeOffset.MinValue;
+    private Task? _wake;          // lopende wekstap (SDP-query), gedeeld door vooraf wekken en verbinden
+    private bool _preWoken;       // al vooraf gewekt sinds de AirPods in beeld kwamen
+    private bool _autoConnecting; // er loopt een automatische verbindpoging
+    private DateTimeOffset _autoConnectEnded = DateTimeOffset.MinValue;
     private AppSettings _settings = new();
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -82,6 +86,8 @@ public partial class App : Application
         NotificationService.Clicked += (_, _) => OnUiThread(() => _popup?.ShowAtCorner());
 
         _status.MarkUnknown(SearchingText);
+        _nowPlaying = new NowPlayingService(_status.NowPlaying, Dispatcher);
+        _ = _nowPlaying.StartAsync();
         _popup = new PopupWindow { DataContext = _status };
         ThemeManager.ApplyTo(_popup, _settings.PopupTheme);
         _popup.ConnectToggleRequested += async (_, _) => await ToggleConnectionAsync();
@@ -523,10 +529,14 @@ public partial class App : Application
         if (_device?.ContainerId is not Guid containerId)
             return;
 
-        if (delay)
-            await Task.Delay(TimeSpan.FromSeconds(1.5));
-
+        // Met vertraging: tot 2 s lang elke 0,25 s kijken of de audio verandert, in plaats van
+        // altijd 1,5 s te wachten. Zo zie je "verbonden" zodra het zo is.
         var active = await BluetoothAudioConnector.IsAudioActiveAsync(containerId, _device.Name);
+        for (var i = 0; delay && i < 8 && active == _status.IsConnected; i++)
+        {
+            await Task.Delay(250);
+            active = await BluetoothAudioConnector.IsAudioActiveAsync(containerId, _device.Name);
+        }
         DiagnosticLog.Write($"verbinding: audio {(active ? "verbonden" : "niet verbonden")}");
         _status.SetConnection(isPaired: true, isConnected: active);
 
@@ -634,6 +644,33 @@ public partial class App : Application
             WindowsSettings.OpenBluetooth();
     }
 
+    /// <summary>Start de wekstap (SDP-query), of geeft de query terug die nog loopt.</summary>
+    private Task StartWake(DeviceConnectionMonitor connection)
+    {
+        if (_wake is null || _wake.IsCompleted)
+            _wake = connection.WakeAsync();
+        return _wake;
+    }
+
+    /// <summary>
+    /// Vooraf wekken: zodra de AirPods in beeld komen (case open, of uit de case) en de audio niet
+    /// verbonden is, alvast de Bluetooth-verbinding opzetten. Verbinden (knop, oordop in) hoeft dan
+    /// niet meer te wekken: ~2 s in plaats van ~8 s. Eén keer per keer dat ze in beeld komen.
+    /// </summary>
+    private async void PreWake()
+    {
+        if (_preWoken || _connection is not { } connection || _status.IsConnected || !_status.CanToggleConnection)
+            return;
+        _preWoken = true;
+        if (connection.IsConnected)
+            return;
+
+        var t0 = DateTime.UtcNow;
+        await StartWake(connection);
+        DiagnosticLog.Write($"vooraf wekken: klaar na {(DateTime.UtcNow - t0).TotalSeconds:0.0} s, " +
+                            $"Bluetooth {(connection.IsConnected ? "ja" : "nee")}");
+    }
+
     /// <summary>Verbindt de audio en wacht tot het endpoint actief is. Geeft true als dat lukte.</summary>
     private async Task<bool> ConnectAsync(PairedAppleDevice device, Guid containerId,
         DeviceConnectionMonitor connection, bool automatic)
@@ -650,7 +687,6 @@ public partial class App : Application
         var deadline = started + TimeSpan.FromSeconds(30);
         var result = AudioConnectResult.Failed;
         var succeeded = false;
-        Task? wake = null;
         var attempt = 0;
 
         // Niet doen: het verzoek al vóór of tijdens de wekstap sturen. Getest (5-11-2026): dat
@@ -660,10 +696,10 @@ public partial class App : Application
             var woke = "al verbonden";
             if (!connection.IsConnected)
             {
-                // De SDP-query kan tijdens het opstarten ~15 s hangen; een query die nog loopt niet
-                // opnieuw starten, en ondertussen kijken of de Bluetooth-verbinding er al is.
-                if (wake is null || wake.IsCompleted)
-                    wake = connection.WakeAsync();
+                // De SDP-query kan tijdens het opstarten ~15 s hangen; een query die nog loopt (ook
+                // die van het vooraf wekken) niet opnieuw starten, en ondertussen kijken of de
+                // Bluetooth-verbinding er al is.
+                var wake = StartWake(connection);
                 var t0 = DateTime.UtcNow;
                 while (!wake.IsCompleted && !connection.IsConnected && DateTime.UtcNow < deadline)
                     await Task.WhenAny(wake, Task.Delay(250));
@@ -723,14 +759,26 @@ public partial class App : Application
             return;
         }
 
-        var now = DateTimeOffset.Now;
-        if (now - _lastAutoConnect < TimeSpan.FromSeconds(30))
+        // Niet twee pogingen tegelijk, en na een mislukte poging 5 s rust. (Vroeger 30 s na de
+        // start: dan werd "oordop in" vlak na een mislukte "case open"-poging overgeslagen.)
+        if (_autoConnecting || DateTimeOffset.Now - _autoConnectEnded < TimeSpan.FromSeconds(5))
+        {
+            DiagnosticLog.Write($"auto-verbinden ({reason}): overgeslagen, {(_autoConnecting ? "loopt al" : "net geprobeerd")}");
             return;
-        _lastAutoConnect = now;
+        }
 
+        _autoConnecting = true;
         DiagnosticLog.Write($"auto-verbinden ({reason}): start");
-        var succeeded = await ConnectAsync(_device, containerId, connection, automatic: true);
-        DiagnosticLog.Write($"auto-verbinden ({reason}): {(succeeded ? "gelukt" : "mislukt")}");
+        try
+        {
+            var succeeded = await ConnectAsync(_device, containerId, connection, automatic: true);
+            DiagnosticLog.Write($"auto-verbinden ({reason}): {(succeeded ? "gelukt" : "mislukt")}");
+        }
+        finally
+        {
+            _autoConnecting = false;
+            _autoConnectEnded = DateTimeOffset.Now;
+        }
     }
 
     private void ApplyStatus(AirPodsStatus status)
@@ -754,6 +802,10 @@ public partial class App : Application
             if (_settings.AutoConnectOnLidOpen)
                 TryAutoConnect("case open");
         }
+
+        // AirPods in beeld maar niet verbonden: alvast wekken, dan gaat verbinden straks sneller.
+        if (!_status.IsConnected)
+            PreWake();
 
         // Oordop net onder de drempel: Windows-melding. Daarnaast de pop-up (zonder focus), want
         // Windows verbergt banners soms (Niet storen, banners uit, automatische regels). Dan
@@ -827,6 +879,7 @@ public partial class App : Application
         _lidDetector.Reset();
         _ears.Reset();
         _lastRawInEar = null; // eerste signaal hierna weer in het log
+        _preWoken = false; // volgende keer in beeld: weer vooraf wekken
         _autoConnectBlockedUntil = DateTimeOffset.MinValue; // AirPods uit beeld (case dicht): automatisch verbinden mag weer
         UpdateTray();
     }

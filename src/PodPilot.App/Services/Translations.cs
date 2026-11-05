@@ -75,6 +75,12 @@ internal static class Translations
 
         // --- Overzicht ---
         ["Snelle instellingen"] = "Quick settings",
+        ["Nu aan het afspelen"] = "Now playing",
+        ["Gepauzeerd"] = "Paused",
+        ["Pauzeren"] = "Pause",
+        ["Afspelen"] = "Play",
+        ["Vorige"] = "Previous",
+        ["Volgende"] = "Next",
         ["Case open"] = "Case open",
         ["Oordop in"] = "Earbud in",
         ["Oordop uit"] = "Earbud out",

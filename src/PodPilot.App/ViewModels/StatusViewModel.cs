@@ -21,6 +21,9 @@ public sealed class StatusViewModel : ObservableObject
     public ComponentViewModel Right { get; } = new(ComponentKind.RightBud, L.T("Rechts"));
     public ComponentViewModel Case { get; } = new(ComponentKind.Case, L.T("Case"));
 
+    /// <summary>Wat er nu speelt (pop-up en Overzicht).</summary>
+    public NowPlayingViewModel NowPlaying { get; } = new();
+
     /// <summary>De onderdelen in de volgorde waarin de pop-up ze toont.</summary>
     public IReadOnlyList<ComponentViewModel> Components { get; }
 

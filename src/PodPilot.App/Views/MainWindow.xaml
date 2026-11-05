@@ -12,7 +12,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:l="clr-namespace:PodPilot.App.Services"
         Title="{l:T 'PodPilot'}"
-        Width="1000" Height="640" MinWidth="900" MinHeight="560" WindowStartupLocation="CenterScreen"
+        Width="1000" Height="740" MinWidth="900" MinHeight="560" WindowStartupLocation="CenterScreen"
         Background="{DynamicResource PageBackground}" FontFamily="{StaticResource UiFont}"
         Foreground="{DynamicResource TextPrimary}" UseLayoutRounding="True"
         PreviewKeyDown="OnWindowPreviewKeyDown">
@@ -49,8 +49,11 @@
                     Visibility="{Binding IsVisible, Converter={StaticResource BoolToVis}}">
                 <StackPanel VerticalAlignment="Center">
                     <Grid Width="76" Height="76" HorizontalAlignment="Center">
-                        <Path x:Name="Icon" Data="{StaticResource BudGeometry}" Fill="{DynamicResource IconFill}"
-                              Stretch="Uniform" Margin="6" RenderTransformOrigin="0.5,0.5" />
+                        <!-- Foto van de oordop/case; de getekende Path alleen voor koptelefoons. -->
+                        <Image x:Name="Photo" Source="/PodPilot;component/Assets/bud-right.png" Stretch="Uniform"
+                               Margin="4" RenderOptions.BitmapScalingMode="HighQuality" />
+                        <Path x:Name="Icon" Data="{StaticResource HeadphonesGeometry}" Fill="{DynamicResource IconFill}"
+                              Stretch="Uniform" Margin="6" Visibility="Collapsed" />
                         <!-- Blauwe stip: oordop zit in het oor. -->
                         <Border Width="12" Height="12" CornerRadius="6" Background="{DynamicResource AccentBrush}"
                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,4,0"
@@ -77,19 +80,15 @@
                 </StackPanel>
             </Border>
             <DataTemplate.Triggers>
-                <!-- Zelfde richting als in de pop-up: links = gespiegeld. -->
                 <DataTrigger Binding="{Binding Kind}" Value="LeftBud">
-                    <Setter TargetName="Icon" Property="RenderTransform">
-                        <Setter.Value>
-                            <ScaleTransform ScaleX="-1" />
-                        </Setter.Value>
-                    </Setter>
+                    <Setter TargetName="Photo" Property="Source" Value="/PodPilot;component/Assets/bud-left.png" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Kind}" Value="Case">
-                    <Setter TargetName="Icon" Property="Data" Value="{StaticResource CaseGeometry}" />
+                    <Setter TargetName="Photo" Property="Source" Value="/PodPilot;component/Assets/case-closed.png" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Kind}" Value="Headphones">
-                    <Setter TargetName="Icon" Property="Data" Value="{StaticResource HeadphonesGeometry}" />
+                    <Setter TargetName="Photo" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Icon" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Level}" Value="Medium">
                     <Setter TargetName="Bar" Property="Foreground" Value="{DynamicResource MediumBrush}" />
@@ -99,6 +98,7 @@
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Level}" Value="Unknown">
                     <Setter TargetName="Icon" Property="Opacity" Value="0.45" />
+                    <Setter TargetName="Photo" Property="Opacity" Value="0.45" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding IsStale}" Value="True">
                     <Setter TargetName="PercentRow" Property="Opacity" Value="0.55" />
@@ -147,6 +147,7 @@
         <ScrollViewer x:Name="OverviewPage" Grid.Column="1" Style="{StaticResource Page}" Visibility="Visible">
             <Grid Margin="36,30,36,30">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -204,8 +205,9 @@
                     <!-- Afbeelding op een zachte vlak in de accentkleur. -->
                     <Border CornerRadius="16" BorderBrush="{DynamicResource WindowBorder}" BorderThickness="1"
                             Background="{DynamicResource AccentSubtleBrush}">
-                        <Image Source="{StaticResource BudsInCaseIllustration}" Width="200" Height="183"
-                               VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        <Image Source="/PodPilot;component/Assets/case-open.png" Width="200" Height="200"
+                               VerticalAlignment="Center" HorizontalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
                     </Border>
                     <ItemsControl Grid.Column="1" ItemsSource="{Binding Components}" ItemTemplate="{StaticResource BigTile}"
                                   Margin="8,0,-8,0" Focusable="False">
@@ -217,9 +219,54 @@
                     </ItemsControl>
                 </Grid>
 
+                <!-- Nu aan het afspelen: hoes, titel, artiest en app. Verborgen als er niets is. -->
+                <Border Grid.Row="2" DataContext="{Binding NowPlaying}" Style="{StaticResource Card}"
+                        Margin="0,16,0,0" Padding="14,12"
+                        Visibility="{Binding HasMedia, Converter={StaticResource BoolToVis}}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <!-- Vorige, afspelen/pauzeren, volgende (E892/E893 = vorige/volgende). -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                            <Button Style="{StaticResource IconButton}" Content="&#xE892;" FontSize="16"
+                                    ToolTip="{l:T 'Vorige'}" Command="{Binding PreviousCommand}"
+                                    IsEnabled="{Binding CanPrevious}" Margin="2,0" />
+                            <Button Style="{StaticResource IconButton}" Content="{Binding PlayPauseGlyph}" FontSize="20"
+                                    ToolTip="{Binding PlayPauseToolTip}" Command="{Binding PlayPauseCommand}"
+                                    IsEnabled="{Binding CanPlayPause}" Margin="2,0" />
+                            <Button Style="{StaticResource IconButton}" Content="&#xE893;" FontSize="16"
+                                    ToolTip="{l:T 'Volgende'}" Command="{Binding NextCommand}"
+                                    IsEnabled="{Binding CanNext}" Margin="2,0" />
+                        </StackPanel>
+                        <Grid Width="56" Height="56" VerticalAlignment="Center">
+                            <Border CornerRadius="8" Background="{DynamicResource ButtonBackground}" />
+                            <!-- E8D6 = muzieknoot, als de speler geen hoes geeft. -->
+                            <TextBlock Text="&#xE8D6;" FontFamily="{StaticResource SymbolFont}" FontSize="22"
+                                       Foreground="{DynamicResource TextSecondary}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <Rectangle RadiusX="8" RadiusY="8"
+                                       Visibility="{Binding HasThumbnail, Converter={StaticResource BoolToVis}}">
+                                <Rectangle.Fill>
+                                    <ImageBrush ImageSource="{Binding Thumbnail}" Stretch="UniformToFill" />
+                                </Rectangle.Fill>
+                            </Rectangle>
+                        </Grid>
+                        <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding StateText}" FontSize="12" Foreground="{DynamicResource AccentBrush}" />
+                            <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" Margin="0,1,0,0"
+                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+                            <TextBlock Text="{Binding Subtitle}" FontSize="13" Foreground="{DynamicResource TextSecondary}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- Snelle instellingen: dezelfde schakelaars als op het tabblad AirPods. -->
-                <TextBlock Grid.Row="2" Text="{l:T 'Snelle instellingen'}" Style="{StaticResource SectionTitle}" Margin="2,24,0,0" />
-                <UniformGrid Grid.Row="2" Rows="1" Margin="-6,52,-6,0">
+                <TextBlock Grid.Row="3" Text="{l:T 'Snelle instellingen'}" Style="{StaticResource SectionTitle}" Margin="2,24,0,0" />
+                <UniformGrid Grid.Row="3" Rows="1" Margin="-6,52,-6,0">
                     <Border Style="{StaticResource Card}" Margin="6,0" Padding="16,14">
                         <Grid>
                             <Grid.ColumnDefinitions>

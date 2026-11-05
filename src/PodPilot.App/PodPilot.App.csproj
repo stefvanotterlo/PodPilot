@@ -17,7 +17,7 @@
     <!-- WFAC010 is een WinForms-advies; voor een WPF-app hoort de DPI-instelling juist in app.manifest. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <!-- Versie-info in de exe; de installer (installer/PodPilot.iss) leest de versie hieruit. -->
-    <Version>1.4.2</Version>
+    <Version>1.5.0</Version>
     <Product>PodPilot</Product>
     <Description>AirPods-batterij en verbinding</Description>
     <!-- Alleen bij een single-file publish: de exe gecomprimeerd opslaan (scheelt ruim de helft). -->
@@ -37,6 +37,11 @@
   <ItemGroup>
     <!-- Verborgen achtergrond (10x spatie op het tabblad Over). -->
     <Resource Include="Assets\easter-egg.png" />
+    <!-- Foto's van de oordopjes en de case (witte achtergrond weggehaald). -->
+    <Resource Include="Assets\bud-left.png" />
+    <Resource Include="Assets\bud-right.png" />
+    <Resource Include="Assets\case-open.png" />
+    <Resource Include="Assets\case-closed.png" />
   </ItemGroup>
 
   <ItemGroup>
