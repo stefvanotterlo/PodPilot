@@ -49,7 +49,7 @@
                 <!-- Schatting uit de batterijgeschiedenis; alleen als de oordop in het oor zit. -->
                 <TextBlock Text="{Binding RemainingText}" FontSize="11" Foreground="{DynamicResource TextSecondary}"
                            HorizontalAlignment="Center" Margin="0,6,0,0"
-                           ToolTip="{l:T 'Schatting op basis van je eerdere luistersessies'}"
+                           ToolTip="{Binding NoteToolTip}"
                            Visibility="{Binding HasRemaining, Converter={StaticResource BoolToVis}}" />
             </StackPanel>
 

@@ -75,7 +75,7 @@
 
                     <TextBlock Text="{Binding RemainingText}" FontSize="12" Foreground="{DynamicResource TextSecondary}"
                                HorizontalAlignment="Center" Margin="0,12,0,0"
-                               ToolTip="{l:T 'Schatting op basis van je eerdere luistersessies'}"
+                               ToolTip="{Binding NoteToolTip}"
                                Visibility="{Binding HasRemaining, Converter={StaticResource BoolToVis}}" />
                 </StackPanel>
             </Border>
@@ -570,6 +570,19 @@
                             </StackPanel>
                             <CheckBox x:Name="RememberPopupToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
                                       AutomationProperties.Name="{l:T 'Pop-up onthoudt zijn plek'}" />
+                        </Grid>
+                        <Border Height="1" Background="{DynamicResource DividerBrush}" />
+                        <Grid Margin="0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="{l:T 'Pop-up op het hoofdscherm'}" Style="{StaticResource RowTitle}" />
+                                <TextBlock Text="{l:T 'Aan: altijd op het hoofdscherm. Uit: op het scherm waar je muis is.'}" Style="{StaticResource RowHint}" />
+                            </StackPanel>
+                            <CheckBox x:Name="PopupMainScreenToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}"
+                                      AutomationProperties.Name="{l:T 'Pop-up op het hoofdscherm'}" />
                         </Grid>
                         <Border Height="1" Background="{DynamicResource DividerBrush}" />
                         <Grid Margin="0,12">

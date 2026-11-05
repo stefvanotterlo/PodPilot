@@ -121,6 +121,14 @@ public sealed class ComponentViewModel : ObservableObject
 
     public void SetRemaining(TimeSpan? remaining) => RemainingText = FormatRemaining(remaining);
 
+    /// <summary>Eigen tekst op de plek van de resterende tijd, bijv. "om 11:42" bij de case.</summary>
+    public void SetNote(string text) => RemainingText = text;
+
+    /// <summary>Uitleg bij de regel onder het percentage.</summary>
+    public string NoteToolTip => _kind == ComponentKind.Case
+        ? L.T("Laatst bekende waarde: de case geeft zijn batterij alleen door als er een oordop in ligt")
+        : L.T("Schatting op basis van je eerdere luistersessies");
+
     private static string FormatRemaining(TimeSpan? remaining)
     {
         if (remaining is not TimeSpan r)

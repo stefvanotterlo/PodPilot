@@ -136,6 +136,29 @@ public sealed class StatusViewModel : ObservableObject
         OnPropertyChanged(nameof(ConnectionText));
     }
 
+    /// <summary>Laatst bekende batterij van de case: percentage, wanneer gezien en welk model.</summary>
+    public sealed record LastCaseInfo(int Percent, DateTimeOffset SeenAt, ushort ModelId);
+
+    /// <summary>Laatst gemeten case-batterij; bij het starten uit de instellingen gezet.</summary>
+    public LastCaseInfo? LastCase { get; set; }
+
+    /// <summary>Het percentage veranderde, of de case ging net uit beeld: bewaren.</summary>
+    public event EventHandler? LastCaseChanged;
+
+    private bool _caseWasKnown;
+
+    /// <summary>"om 11:42", "gisteren 18:05" of "3 nov. 09:12".</summary>
+    private static string FormatSeen(DateTimeOffset seen)
+    {
+        var local = seen.ToLocalTime();
+        var today = DateTime.Today;
+        if (local.Date == today)
+            return L.T("om {0:HH:mm}", local);
+        if (local.Date == today.AddDays(-1))
+            return L.T("gisteren {0:HH:mm}", local);
+        return L.T("{0:d MMM HH:mm}", local);
+    }
+
     /// <summary>Verwerkt een nieuwe status van de scanner.</summary>
     public void Apply(AirPodsStatus status)
     {
@@ -146,14 +169,38 @@ public sealed class StatusViewModel : ObservableObject
         Left.Update(status.Left.BatteryPercent, status.Left.IsCharging, status.Left.IsInEar);
         Right.Update(status.Right.BatteryPercent, status.Right.IsCharging, status.Right.IsInEar);
 
-        // Een case zonder oordopjes geeft zijn batterij niet door. Toon dan de laatst bekende
-        // waarde (gedimd), zolang het om dezelfde AirPods gaat.
-        if (status.Case.IsKnown)
-            Case.Update(status.Case.BatteryPercent, status.Case.IsCharging, false);
-        else if (Case.Percent is int lastKnown && _lastModelId == status.Model.Id)
-            Case.Update(lastKnown, false, false, isStale: true);
+        // Een case zonder oordopjes geeft zijn batterij niet door (de oordopjes melden hem, alleen
+        // als er minstens één in ligt). Toon dan de laatst bekende waarde, gedimd en met de tijd,
+        // zolang het om hetzelfde model gaat. Die waarde blijft ook na herstarten bewaard.
+        if (status.Case.IsKnown && status.Case.BatteryPercent is int casePercent)
+        {
+            Case.Update(casePercent, status.Case.IsCharging, false);
+            Case.SetNote("");
+            var changed = LastCase is not { } prev || prev.Percent != casePercent || prev.ModelId != status.Model.Id;
+            LastCase = new LastCaseInfo(casePercent, status.ReceivedAt, status.Model.Id);
+            _caseWasKnown = true;
+            if (changed)
+                LastCaseChanged?.Invoke(this, EventArgs.Empty);
+        }
         else
-            Case.Clear();
+        {
+            // Net uit beeld: de tijd van het laatste bericht bewaren.
+            if (_caseWasKnown)
+            {
+                _caseWasKnown = false;
+                LastCaseChanged?.Invoke(this, EventArgs.Empty);
+            }
+
+            if (LastCase is { } last && last.ModelId == status.Model.Id)
+            {
+                Case.Update(last.Percent, false, false, isStale: true);
+                Case.SetNote(FormatSeen(last.SeenAt));
+            }
+            else
+            {
+                Case.Clear();
+            }
+        }
 
         _lastModelId = status.Model.Id;
 
@@ -173,6 +220,12 @@ public sealed class StatusViewModel : ObservableObject
         Left.Clear();
         Right.Clear();
         Case.Clear();
+        if (_caseWasKnown)
+        {
+            // Case ging dicht met een oordop erin: tijd van het laatste bericht bewaren.
+            _caseWasKnown = false;
+            LastCaseChanged?.Invoke(this, EventArgs.Empty);
+        }
         StatusText = reason;
 
         OnPropertyChanged(nameof(SubtitleText));

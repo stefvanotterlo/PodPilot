@@ -111,6 +111,21 @@ public sealed class AppSettings
     /// </summary>
     public bool RememberPopupPosition { get; set; } = true;
 
+    /// <summary>
+    /// True (standaard): de pop-up komt altijd op het hoofdscherm. False: bij een klik of sneltoets
+    /// op het scherm waar de muis is (automatisch tonen bij case open blijft het hoofdscherm).
+    /// </summary>
+    public bool PopupOnMainScreen { get; set; } = true;
+
+    /// <summary>Laatst bekende case-batterij (zonder oordop in de case is die niet te zien).</summary>
+    public int? LastCasePercent { get; set; }
+
+    /// <summary>Wanneer de case-batterij voor het laatst is gezien.</summary>
+    public DateTimeOffset? LastCaseSeenAt { get; set; }
+
+    /// <summary>Model (PID) waar die waarde bij hoort.</summary>
+    public int? LastCaseModelId { get; set; }
+
     /// <summary>Zelf gekozen plek van de pop-up (linkerbovenhoek, schermpixels); null = rechtsonder.</summary>
     public int? PopupX { get; set; }
 

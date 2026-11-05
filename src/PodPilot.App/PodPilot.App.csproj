@@ -17,7 +17,7 @@
     <!-- WFAC010 is een WinForms-advies; voor een WPF-app hoort de DPI-instelling juist in app.manifest. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <!-- Versie-info in de exe; de installer (installer/PodPilot.iss) leest de versie hieruit. -->
-    <Version>1.5.0</Version>
+    <Version>1.5.1</Version>
     <Product>PodPilot</Product>
     <Description>AirPods-batterij en verbinding</Description>
     <!-- Alleen bij een single-file publish: de exe gecomprimeerd opslaan (scheelt ruim de helft). -->

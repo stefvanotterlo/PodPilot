@@ -85,13 +85,17 @@ public partial class PopupWindow : Window
     /// </summary>
     public System.Drawing.Point? CustomPosition { get; set; }
 
+    /// <summary>True: altijd op het hoofdscherm. False: bij een klik op het scherm van de muis.</summary>
+    public bool OnMainScreen { get; set; } = true;
+
     /// <summary>De pop-up is versleept naar een nieuwe plek (schermpixels).</summary>
     public event EventHandler<System.Drawing.Point>? PositionChanged;
 
     /// <summary>
     /// Zet de pop-up op zijn plek, in echte schermpixels (dus goed bij elke schaal en
     /// schermindeling): de zelf gekozen plek als die nog op een scherm ligt, anders rechtsonder in
-    /// het werkgebied. Bij een klik (tray, sneltoets) het scherm waar de muis is, anders het hoofdscherm.
+    /// het werkgebied van het hoofdscherm. Staat <see cref="OnMainScreen"/> uit, dan bij een klik
+    /// (tray, sneltoets) het scherm waar de muis is.
     /// </summary>
     private void PlaceOnScreen(bool nearCursor)
     {
@@ -106,7 +110,7 @@ public partial class PopupWindow : Window
         }
 
         POINT anchor = default;
-        if (!nearCursor || !GetCursorPos(out anchor))
+        if (OnMainScreen || !nearCursor || !GetCursorPos(out anchor))
             anchor = default; // (0,0) ligt altijd op het hoofdscherm
         var monitor = MonitorFromPoint(anchor, MonitorDefaultToPrimary);
         var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };

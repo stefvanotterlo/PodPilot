@@ -76,6 +76,14 @@ internal static class Translations
         // --- Overzicht ---
         ["Snelle instellingen"] = "Quick settings",
         ["Nu aan het afspelen"] = "Now playing",
+        ["om {0:HH:mm}"] = "at {0:HH:mm}",
+        ["gisteren {0:HH:mm}"] = "yesterday {0:HH:mm}",
+        ["{0:d MMM HH:mm}"] = "{0:d MMM HH:mm}",
+        ["Laatst bekende waarde: de case geeft zijn batterij alleen door als er een oordop in ligt"] =
+            "Last known value: the case only reports its battery when an earbud is inside",
+        ["Pop-up op het hoofdscherm"] = "Pop-up on the main display",
+        ["Aan: altijd op het hoofdscherm. Uit: op het scherm waar je muis is."] =
+            "On: always on the main display. Off: on the display where your mouse is.",
         ["Gepauzeerd"] = "Paused",
         ["Pauzeren"] = "Pause",
         ["Afspelen"] = "Play",

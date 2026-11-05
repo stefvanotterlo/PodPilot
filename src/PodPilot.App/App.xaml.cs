@@ -64,6 +64,18 @@ public partial class App : Application
         // Taal vóór alle vensters kiezen; wisselen werkt na herstarten.
         L.Init(_settings.Language);
         _status = new StatusViewModel();
+        // Laatst bekende case-batterij terugzetten en bij elke wijziging bewaren.
+        if (_settings is { LastCasePercent: int casePercent, LastCaseSeenAt: { } caseSeen, LastCaseModelId: int caseModel })
+            _status.LastCase = new StatusViewModel.LastCaseInfo(casePercent, caseSeen, (ushort)caseModel);
+        _status.LastCaseChanged += (_, _) =>
+        {
+            if (_status.LastCase is not { } last)
+                return;
+            _settings.LastCasePercent = last.Percent;
+            _settings.LastCaseSeenAt = last.SeenAt;
+            _settings.LastCaseModelId = last.ModelId;
+            _settings.Save();
+        };
         try
         {
             _history = new BatteryHistory(Path.Combine(Environment.GetFolderPath(
@@ -477,10 +489,12 @@ public partial class App : Application
     /// <summary>De bewaarde plek van de pop-up doorgeven (geen, of niet onthouden = rechtsonder).</summary>
     private void ApplyPopupPosition()
     {
-        if (_popup is not null)
-            _popup.CustomPosition = _settings.RememberPopupPosition && _settings.PopupX is int x && _settings.PopupY is int y
-                ? new System.Drawing.Point(x, y)
-                : null;
+        if (_popup is null)
+            return;
+        _popup.CustomPosition = _settings.RememberPopupPosition && _settings.PopupX is int x && _settings.PopupY is int y
+            ? new System.Drawing.Point(x, y)
+            : null;
+        _popup.OnMainScreen = _settings.PopupOnMainScreen;
     }
 
     /// <summary>

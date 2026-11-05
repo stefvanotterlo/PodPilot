@@ -75,6 +75,7 @@ public partial class MainWindow : Window
         StartupToggle.IsChecked = StartupRegistration.IsEnabled();
         AutoPopupToggle.IsChecked = settings.AutoPopupOnLidOpen;
         RememberPopupToggle.IsChecked = settings.RememberPopupPosition;
+        PopupMainScreenToggle.IsChecked = settings.PopupOnMainScreen;
         RefreshPopupPosition();
         NotifyToggle.IsChecked = settings.NotifyLowBattery;
         ThresholdSection.IsEnabled = settings.NotifyLowBattery;
@@ -91,6 +92,11 @@ public partial class MainWindow : Window
         {
             _settings.RememberPopupPosition = RememberPopupToggle.IsChecked == true;
             RefreshPopupPosition();
+            Changed();
+        });
+        OnToggle(PopupMainScreenToggle, () =>
+        {
+            _settings.PopupOnMainScreen = PopupMainScreenToggle.IsChecked == true;
             Changed();
         });
         OnToggle(NotifyToggle, OnNotifyChanged);
