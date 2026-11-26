@@ -46,8 +46,8 @@ public sealed class AirPodsScanner : IDisposable
     public TimeSpan StaleAfter { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Als de huidige set zo lang niets meer heeft uitgezonden, mag een andere set het overnemen,
-    /// ook als die een zwakker signaal heeft.
+    /// Als de huidige set zo lang niets meer heeft uitgezonden, mag een oordop die erbij past
+    /// (zelfde model, kleur en batterij) het overnemen, ook met een zwakker signaal.
     /// </summary>
     public TimeSpan SwitchAfter { get; set; } = TimeSpan.FromSeconds(5);
 
@@ -70,6 +70,13 @@ public sealed class AirPodsScanner : IDisposable
 
     /// <summary>Er is een nieuwe status van de gekozen AirPods.</summary>
     public event EventHandler<AirPodsStatus>? StatusUpdated;
+
+    /// <summary>
+    /// Een andere set AirPods heeft het overgenomen (komt vóór <see cref="StatusUpdated"/>). Wie
+    /// in-oor-wijzigingen bijhoudt, moet dan opnieuw beginnen: het verschil met de vorige set is
+    /// geen in- of uitdoen.
+    /// </summary>
+    public event EventHandler<AirPodsStatus>? SetChanged;
 
     /// <summary>Er is al <see cref="StaleAfter"/> geen data meer binnengekomen.</summary>
     public event EventHandler? StatusLost;
@@ -112,6 +119,7 @@ public sealed class AirPodsScanner : IDisposable
         var now = DateTimeOffset.Now;
         string? rejectReason = null;
         AirPodsStatus? updated = null;
+        var newSet = false;
 
         if (rssi < MinimumRssi)
         {
@@ -125,47 +133,89 @@ public sealed class AirPodsScanner : IDisposable
         {
             lock (_gate)
             {
-                if (ShouldTakeOver(_current, address, rssi, message, now))
-                    _current = updated = AirPodsStatus.FromMessage(message, address, rssi, now);
+                var decision = Decide(_current, address, rssi, message, now);
+                if (decision == TakeOver.Reject)
+                {
+                    rejectReason = "andere AirPods in de buurt (andere batterijwaarden of kleur)";
+                }
                 else
-                    rejectReason = "andere AirPods in de buurt met een sterker signaal zijn actief";
+                {
+                    newSet = decision == TakeOver.NewSet && _current is not null;
+                    _current = updated = AirPodsStatus.FromMessage(message, address, rssi, now);
+                }
             }
         }
 
         AdvertisementSeen?.Invoke(this,
             new AdvertisementSeenEventArgs(address, rssi, message, rejectReason is null, rejectReason));
 
+        if (newSet && updated is not null)
+            SetChanged?.Invoke(this, updated);
         if (updated is not null)
             StatusUpdated?.Invoke(this, updated);
     }
 
+    private enum TakeOver
+    {
+        Reject,
+
+        /// <summary>Dezelfde set (dezelfde of de andere oordop): gewoon bijwerken.</summary>
+        SameSet,
+
+        /// <summary>Een andere set neemt het over: geen in-oor-gebeurtenis afleiden uit de wissel.</summary>
+        NewSet,
+    }
+
     /// <summary>
     /// Bepaalt of een nieuwe advertentie de huidige status mag vervangen. Zo blijven we bij
-    /// één set AirPods, ook als iemand anders er een in de buurt heeft.
+    /// onze eigen AirPods, ook als iemand anders in de buurt hetzelfde model heeft.
     /// </summary>
-    private bool ShouldTakeOver(AirPodsStatus? current, ulong address, short rssi,
-                                ProximityPairingMessage message, DateTimeOffset now)
+    /// <remarks>
+    /// Elke oordop zendt met een eigen, wisselend BLE-adres, en het herkenbare deel van het bericht
+    /// is niet aan onze set gekoppeld. Daarom herkennen we de eigen set aan model, kleur én de
+    /// batterijwaarden (die veranderen maar in stappen van 10%). Een set met andere waarden neemt
+    /// het alleen over als die van ons al <see cref="StaleAfter"/> stil is (dan zijn de status en de
+    /// in-oor-detectie toch al gewist), of als hij heel veel dichterbij is (bijvoorbeeld als we bij
+    /// het opstarten eerst de set van een ander zagen).
+    /// </remarks>
+    private TakeOver Decide(AirPodsStatus? current, ulong address, short rssi,
+                            ProximityPairingMessage message, DateTimeOffset now)
     {
         if (current is null)
-            return true;
+            return TakeOver.NewSet;
 
         // Dezelfde zender (dezelfde oordop): altijd bijwerken.
         if (current.AdvertisementAddress == address)
-            return true;
+            return TakeOver.SameSet;
 
-        // De huidige set is een tijdje stil: een andere mag het overnemen.
-        if (now - current.ReceivedAt > SwitchAfter)
-            return true;
+        var looksLikeOurs = current.Message.ModelId == message.ModelId
+                            && current.Message.Color == message.Color
+                            && BatteriesMatch(current.Message, message);
 
-        // Waarschijnlijk de andere oordop van dezelfde set: hetzelfde model en dezelfde kleur,
-        // en een vergelijkbaar signaal. Elke oordop heeft een eigen BLE-adres.
-        var sameSet = current.Message.ModelId == message.ModelId
-                      && current.Message.Color == message.Color;
-        if (sameSet && rssi >= current.Rssi - 10)
-            return true;
+        // De andere oordop van dezelfde set (of dezelfde oordop met een nieuw adres).
+        if (looksLikeOurs && (rssi >= current.Rssi - 15 || now - current.ReceivedAt > SwitchAfter))
+            return TakeOver.SameSet;
 
-        // Een andere set: alleen als die duidelijk dichterbij is.
-        return rssi > current.Rssi + 5;
+        // Een andere set: alleen als die véél dichterbij is (wij zitten dan waarschijnlijk op de
+        // verkeerde set), en dan als nieuwe set.
+        if (!looksLikeOurs && rssi > current.Rssi + TakeOverMargin)
+            return TakeOver.NewSet;
+
+        return TakeOver.Reject;
+    }
+
+    /// <summary>Zoveel dB sterker moet een andere set zijn om het over te nemen.</summary>
+    public int TakeOverMargin { get; set; } = 20;
+
+    /// <summary>
+    /// True als de batterijwaarden bij dezelfde set kunnen horen: per oordop en de case hoogstens
+    /// 10% verschil (onbekend telt als passend).
+    /// </summary>
+    private static bool BatteriesMatch(ProximityPairingMessage a, ProximityPairingMessage b)
+    {
+        static bool Close(int? x, int? y) => x is null || y is null || Math.Abs(x.Value - y.Value) <= 10;
+        return Close(a.LeftBattery, b.LeftBattery) && Close(a.RightBattery, b.RightBattery)
+               && Close(a.CaseBattery, b.CaseBattery);
     }
 
     private void CheckStale()

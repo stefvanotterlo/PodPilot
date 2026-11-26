@@ -35,6 +35,7 @@ public partial class App : Application
     private readonly LowBatteryMonitor _lowBattery = new();
     private readonly CaseBatteryMonitor _caseBattery = new();
     private readonly BudOutOfCaseMonitor _looseBuds = new();
+    private readonly Dictionary<ulong, DateTimeOffset> _ignoredLogged = new();
     private readonly EarDetectionMonitor _ears = new();
     private readonly MediaController _media = new();
     private NowPlayingService? _nowPlaying;
@@ -158,6 +159,29 @@ public partial class App : Application
         ApplyNamedHotkeysFromSettings();
 
         _scanner = new AirPodsScanner();
+        // Andere set neemt het over: de in-oor-detectie opnieuw beginnen, anders telt het verschil
+        // met de vorige set als in- of uitdoen (en pauzeert de muziek door de AirPods van een ander).
+        _scanner.SetChanged += (_, s) => OnUiThread(() =>
+        {
+            DiagnosticLog.Write($"scanner: andere set neemt over (adres {s.AdvertisementAddress:X12}, RSSI {s.Rssi}, ruw {s.Message.ToHex()})");
+            _ears.Reset();
+            _looseBuds.Reset();
+            _lastRawInEar = null;
+        });
+        // Genegeerde AirPods van anderen in het log, hoogstens één regel per adres per minuut.
+        _scanner.AdvertisementSeen += (_, e) =>
+        {
+            if (e.Accepted || e.Rssi < _scanner.MinimumRssi || e.RejectReason?.StartsWith("ander model") == true)
+                return;
+            var now = DateTimeOffset.Now;
+            lock (_ignoredLogged)
+            {
+                if (_ignoredLogged.TryGetValue(e.Address, out var last) && now - last < TimeSpan.FromMinutes(1))
+                    return;
+                _ignoredLogged[e.Address] = now;
+            }
+            DiagnosticLog.Write($"scanner: genegeerd adres {e.Address:X12}, RSSI {e.Rssi}: {e.RejectReason} (ruw {e.Message.ToHex()})");
+        };
         _scanner.StatusUpdated += (_, s) => OnUiThread(() => ApplyStatus(s));
         _scanner.StatusLost += (_, _) => OnUiThread(() => MarkUnknown(UnknownText));
         _scanner.ScannerStopped += (_, error) =>
